@@ -13,7 +13,7 @@ tab1, tab2, tab3 = st.tabs(["🚀 能力評価＆荒れ度判定", "📊 検証�
 with tab1:
   st.header("馬の実力・調子評価 ＆ レース荒れ度診断")
   st.write(
-      "出馬表CSVを貼り付けると、オッズに依存せず『スピード指数・近走の安定度・出走間隔』をベースに馬の本来の実力を算出し、そのレースが荒れるか堅いかを自動判定します。"
+      "出馬表CSVを貼り付けると、『スピード指数・上がり3F』に加えて『近走成績の好走度・調子・リズム』を総合解析して馬本来の実力を算出し、レースの荒れ度を自動判定します。"
   )
 
   pasted_data = st.text_area(
@@ -38,14 +38,12 @@ with tab1:
         for l in data_lines:
           parts = [p.strip() for p in l.split(",")]
           row_dict = {}
-          # 15列のパース位置を厳密に固定
           row_dict["斤量"] = parts[14] if len(parts) > 14 else (parts[-1] if len(parts) >= 1 else "55.0")
           row_dict["騎手"] = parts[13] if len(parts) > 13 else (parts[-2] if len(parts) >= 2 else "レーン")
           row_dict["近走5走成績"] = parts[12] if len(parts) > 12 and parts[12] else "0-0-0-0"
           row_dict["スピード指数"] = parts[11] if len(parts) > 11 else ""
           row_dict["上がり3F"] = parts[10] if len(parts) > 10 else ""
           
-          # 脚質データ（逃・先行・差・追 など正しく判定）
           raw_kyaku = parts[9] if len(parts) > 9 else "差"
           if raw_kyaku not in ["逃", "先行", "差", "追"]:
             raw_kyaku = "差"
@@ -81,7 +79,7 @@ with tab1:
         df_input["人気_num"] = df_input["人気"].apply(lambda x: extract_num(x, 5.0))
         df_input["オッズ_num"] = df_input["単勝オッズ"].apply(lambda x: extract_num(x, 15.0))
         df_input["上がり3F_val"] = df_input["上がり3F"].apply(lambda x: extract_num(x, 35.5))
-        df_input["speed_val"] = df_input["スピード指数"].apply(lambda x: extract_num(x, 70.0))
+        df_input["speed_val"] = df_input["スピード指数"].apply(lambda x: extract_num(x, 0.0))
 
         st.success(f"データを正常に読み込みました（全 {len(df_input)} 頭登録中）")
         
@@ -97,27 +95,65 @@ with tab1:
 
   if st.button("🚀 能力評価 ＆ 荒れ度判定を実行", type="primary"):
     if df_input is not None and not df_input.empty:
-      with st.spinner("馬の能力値（スピード指数・近走調子）を解析中..."):
+      with st.spinner("馬の能力値・調子（近走成績）を解析中..."):
         df_res = df_input.copy()
 
+        # 実力 ＋ 調子（近走成績の好走度）を最優先にした評価ロジック
         def calc_ability_score(row):
+          score = 50.0
+          
+          # 1. スピード指数ボーナス
           try:
             s_val = float(row["speed_val"])
+            if s_val > 0:
+              score += (s_val - 60.0) * 1.5
           except:
-            s_val = 70.0
-          
+            pass
+
+          # 2. 上がり3Fボーナス（速いタイムほど高得点）
           try:
             f_val = float(row["上がり3F_val"])
-            f_bonus = max(0.0, (37.0 - f_val) * 2.0)
+            if f_val > 25.0:
+              score += max(0.0, (37.0 - f_val) * 4.0)
           except:
-            f_bonus = 0.0
+            pass
 
-          ability_score = s_val + f_bonus
-          return max(10.0, ability_score)
+          # 3. 近走成績（調子・リズム）の反映
+          # 例: "0-5-2-3" などの形式から「1着回数」「2着回数」「3着回数」を抽出し、好走実績をボーナス加算
+          try:
+            record_str = str(row["近走5走成績"])
+            parts_rec = record_str.split("-")
+            if len(parts_rec) >= 3:
+              wins = int(parts_rec[0]) if parts_rec[0].isdigit() else 0
+              seconds = int(parts_rec[1]) if parts_rec[1].isdigit() else 0
+              thirds = int(parts_rec[2]) if parts_rec[2].isdigit() else 0
+              
+              # 連対（1〜2着）や3着の多さを現在の調子の良さ（勢い）として高く評価
+              score += (wins * 8.0) + (seconds * 5.0) + (thirds * 3.0)
+          except:
+            pass
+
+          # 4. オッズ補正（人気だけに頼らず、市場評価も少しだけ隠し味に）
+          try:
+            odds = float(row["オッズ_num"])
+            if 0 < odds < 100:
+              score += max(0.0, (30.0 - odds) * 0.1)
+          except:
+            pass
+
+          # 同点防止の微小差
+          try:
+            umaban_int = int(str(row["馬番"]).strip())
+            score += (umaban_int * 0.001)
+          except:
+            pass
+
+          return max(10.0, score)
 
         df_res["能力値スコア"] = df_res.apply(calc_ability_score, axis=1)
         df_res["能力値スコア_str"] = df_res["能力値スコア"].round(1).astype(str)
 
+        # 降順ソート（実力・調子上位順）
         df_ranked = df_res.sort_values(by="能力値スコア", ascending=False).reset_index(drop=True)
 
         top1_score = df_ranked.iloc[0]["能力値スコア"]
@@ -136,12 +172,12 @@ with tab1:
           race_tendency = "⚖️ 【標準・中波乱傾向】（上位拮抗・フォーメーション推奨）"
           strategy_advice = "実力が拮抗しています。上位3頭（◎〇▲）を中心とした手堅い馬券構成がおすすめです。"
 
-        st.subheader("📊 能力評価ランキング結果（実力順）")
+        st.subheader("📊 能力・調子評価ランキング結果（実力順）")
         
         display_cols = [
             "開催地", "レース番号", "距離・馬場", "レース条件",
             "馬番", "馬名", "人気", "単勝オッズ",
-            "能力値スコア_str", "脚質", "上がり3F", "スピード指数", "騎手"
+            "能力値スコア_str", "脚質", "上がり3F", "近走5走成績", "騎手"
         ]
         available_cols = [c for c in display_cols if c in df_ranked.columns]
         df_display = df_ranked[available_cols].rename(columns={"能力値スコア_str": "能力値スコア"})
