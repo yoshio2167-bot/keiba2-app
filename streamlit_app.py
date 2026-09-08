@@ -38,6 +38,7 @@ with tab1:
         for l in data_lines:
           parts = [p.strip() for p in l.split(",")]
           row_dict = {}
+          # 正しい15列のパース順序に修正
           row_dict["斤量"] = parts[-1] if len(parts) >= 1 else "55.0"
           row_dict["騎手"] = parts[-2] if len(parts) >= 2 else "レーン"
           row_dict["近走5走成績"] = parts[-3] if len(parts) >= 3 and parts[-3] else "0-0-0-0"
@@ -93,7 +94,6 @@ with tab1:
       with st.spinner("馬の能力値（スピード指数・近走調子）を解析中..."):
         df_res = df_input.copy()
 
-        # オッズに頼らず「スピード指数」と「上がり3Fの鋭さ」を最優先にした実力評価スコア
         def calc_ability_score(row):
           try:
             s_val = float(row["speed_val"])
@@ -102,22 +102,18 @@ with tab1:
           
           try:
             f_val = float(row["上がり3F_val"])
-            # 上がり3Fは数値が小さいほど速いのでボーナス
             f_bonus = max(0.0, (37.0 - f_val) * 2.0)
           except:
             f_bonus = 0.0
 
-          # 基本能力 ＝ スピード指数 ＋ 上がり3Fボーナス
           ability_score = s_val + f_bonus
           return max(10.0, ability_score)
 
         df_res["能力値スコア"] = df_res.apply(calc_ability_score, axis=1)
+        df_res["能力値スコア_str"] = df_res["能力値スコア"].round(1).astype(str)
 
-        # ランキング化（実力上位順）
         df_ranked = df_res.sort_values(by="能力値スコア", ascending=False).reset_index(drop=True)
 
-        # レースの「荒れ度」判定ロジック
-        # 上位馬の能力値の差やオッズのバラつきを元に判定
         top1_score = df_ranked.iloc[0]["能力値スコア"]
         top2_score = df_ranked.iloc[1]["能力値スコア"] if len(df_ranked) > 1 else top1_score
         score_diff = top1_score - top2_score
@@ -131,7 +127,6 @@ with tab1:
           race_tendency = "⚡ 【大波乱・難解傾向】（混戦・穴馬台頭注意）"
           strategy_advice = "上位拮抗または人気薄の能力値が高いため、荒れる可能性大です。手広く流すか、思い切った穴狙い（ワイドBOX等）がおすすめです。"
         else:
-          stats_top3 = (top1_score + top2_score + (df_ranked.iloc[2]["能力値スコア"] if len(df_ranked) > 2 else top2_score)) / 3
           race_tendency = "⚖️ 【標準・中波乱傾向】（上位拮抗・フォーメーション推奨）"
           strategy_advice = "実力が拮抗しています。上位3頭（◎〇▲）を中心とした手堅い馬券構成がおすすめです。"
 
@@ -140,10 +135,10 @@ with tab1:
         display_cols = [
             "開催地", "レース番号", "距離・馬場", "レース条件",
             "馬番", "馬名", "人気", "単勝オッズ",
-            "能力値スコア", "脚質", "上がり3F", "スピード指数", "騎手"
+            "能力値スコア_str", "脚質", "上がり3F", "スピード指数", "騎手"
         ]
         available_cols = [c for c in display_cols if c in df_ranked.columns]
-        df_display = df_ranked[available_cols]
+        df_display = df_ranked[available_cols].rename(columns={"能力値スコア_str": "能力値スコア"})
         st.dataframe(df_display, use_container_width=True)
 
         kaisai_title = str(df_display["開催地"].iloc[0]) if not df_display["開催地"].empty else "中山"
