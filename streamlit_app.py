@@ -38,22 +38,28 @@ with tab1:
         for l in data_lines:
           parts = [p.strip() for p in l.split(",")]
           row_dict = {}
-          # 正しい15列のパース順序に修正
-          row_dict["斤量"] = parts[-1] if len(parts) >= 1 else "55.0"
-          row_dict["騎手"] = parts[-2] if len(parts) >= 2 else "レーン"
-          row_dict["近走5走成績"] = parts[-3] if len(parts) >= 3 and parts[-3] else "0-0-0-0"
-          row_dict["スピード指数"] = parts[-4] if len(parts) >= 4 else ""
-          row_dict["上がり3F"] = parts[-5] if len(parts) >= 5 else ""
-          row_dict["脚質"] = parts[-6] if len(parts) >= 6 else "差"
-          row_dict["単勝オッズ"] = parts[-7] if len(parts) >= 7 else "10.0"
-          row_dict["人気"] = parts[-8] if len(parts) >= 8 else "5人気"
-          row_dict["馬名"] = parts[-9] if len(parts) >= 9 else ""
-          row_dict["馬番"] = parts[-10] if len(parts) >= 10 else "1"
-          row_dict["レース条件"] = parts[-11] if len(parts) >= 11 else "3歳上1勝クラス"
-          row_dict["距離・馬場"] = parts[-12] if len(parts) >= 12 else "芝1200m(雨 稍重)"
-          row_dict["レース番号"] = parts[-13] if len(parts) >= 13 else "12R"
-          row_dict["開催地"] = parts[-14] if len(parts) >= 14 else "中山"
-          row_dict["日付"] = parts[-15] if len(parts) >= 15 else "2026/09/06"
+          # 15列のパース位置を厳密に固定
+          row_dict["斤量"] = parts[14] if len(parts) > 14 else (parts[-1] if len(parts) >= 1 else "55.0")
+          row_dict["騎手"] = parts[13] if len(parts) > 13 else (parts[-2] if len(parts) >= 2 else "レーン")
+          row_dict["近走5走成績"] = parts[12] if len(parts) > 12 and parts[12] else "0-0-0-0"
+          row_dict["スピード指数"] = parts[11] if len(parts) > 11 else ""
+          row_dict["上がり3F"] = parts[10] if len(parts) > 10 else ""
+          
+          # 脚質データ（逃・先行・差・追 など正しく判定）
+          raw_kyaku = parts[9] if len(parts) > 9 else "差"
+          if raw_kyaku not in ["逃", "先行", "差", "追"]:
+            raw_kyaku = "差"
+          row_dict["脚質"] = raw_kyaku
+
+          row_dict["単勝オッズ"] = parts[8] if len(parts) > 8 else "10.0"
+          row_dict["人気"] = parts[7] if len(parts) > 7 else "5人気"
+          row_dict["馬名"] = parts[6] if len(parts) > 6 else ""
+          row_dict["馬番"] = parts[5] if len(parts) > 5 else "1"
+          row_dict["レース条件"] = parts[4] if len(parts) > 4 else "3歳上1勝クラス"
+          row_dict["距離・馬場"] = parts[3] if len(parts) > 3 else "芝1200m(雨 稍重)"
+          row_dict["レース番号"] = parts[2] if len(parts) > 2 else "12R"
+          row_dict["開催地"] = parts[1] if len(parts) > 1 else "中山"
+          row_dict["日付"] = parts[0] if len(parts) > 0 else "2026/09/06"
 
           parsed_rows.append(row_dict)
 
