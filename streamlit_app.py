@@ -45,6 +45,7 @@ with tab1:
         for l in data_lines:
           parts = [p.strip() for p in l.split(",")]
           row_dict = {}
+          # 15列構成を正確に維持
           row_dict["斤量"] = parts[14] if len(parts) > 14 else (parts[-1] if len(parts) >= 1 else "55.0")
           row_dict["騎手"] = parts[13] if len(parts) > 13 else (parts[-2] if len(parts) >= 2 else "レーン")
           row_dict["近走5走成績"] = parts[12] if len(parts) > 12 and parts[12] else "0-0-0-0"
@@ -346,58 +347,59 @@ with tab3:
     inp_date = st.text_input("日付", value="2026/09/06")
   with col_t2:
     track_list = ["東京", "中山", "京都", "阪神", "中京", "新潟", "福島", "小倉", "札幌", "函館"]
-    inp_kaisai = st.selectbox("開催地", options=track_list, index=1)
+    inp_kaisai = st.selectbox("開催地", options=track_list, index=3)
 
   col_t3, col_t4, col_t5 = st.columns(3)
   with col_t3:
     r_list = [f"{i}R" for i in range(1, 13)]
     inp_rnum = st.selectbox("レース番号", options=r_list, index=11)
   with col_t4:
-    # 距離・馬場を選択式に変更
     dist_list = [
         "芝1200m(良)", "芝1200m(稍重)", "芝1200m(重)", "芝1200m(不良)",
         "芝1400m(良)", "芝1600m(良)", "芝1600m(稍重)", "芝1800m(良)", "芝2000m(良)", "芝2000m(稍重)", "芝2400m(良)", "芝3000m(良)",
         "ダ1200m(良)", "ダ1200m(稍重)", "ダ1400m(良)", "ダ1400m(稍重)", "ダ1800m(良)", "ダ1800m(重)"
     ]
-    inp_dist = st.selectbox("距離・馬場", options=dist_list, index=0)
+    inp_dist = st.selectbox("距離・馬場", options=dist_list, index=4)
   with col_t5:
-    # 条件を選択式に変更
     cond_list = [
         "新馬", "未勝利", "1勝クラス", "2勝クラス", "3勝クラス", 
         "オープン", "G3", "G2", "G1", "L(リステッド)"
     ]
-    inp_cond = st.selectbox("レース条件", options=cond_list, index=2)
+    inp_cond = st.selectbox("レース条件", options=cond_list, index=3)
 
   if st.button("✨ 完璧なCSVに変換する"):
     if raw_txt:
       lines = [l.strip() for l in raw_txt.strip().split("\n") if l.strip()]
       parsed_rows = []
       for line in lines:
-        tokens = re.split(r'[\s,\t]+', line)
+        tokens = [t.strip() for t in re.split(r'[,]+', line) if t.strip()]
         if len(tokens) >= 2:
+          # ネットケイバ等の一般的なカンマ区切りテキスト（馬番,馬名,...）を正しくマッピング
           umaban = tokens[0]
           ubana = tokens[1]
           
           odds = "10.0"
           ninki = "5人気"
-          kishu = "石橋脩"
-          kinryo = "58.0"
+          kishu = "レーン"
+          kinryo = "55.0"
           kyakushitsu = "差"
+          agari = "35.0"
+          speed = "70.0"
+          record = "0-0-0-0"
 
           for t in tokens[2:]:
-            if re.search(r'^\d+\.?\d*$', t) and float(t) < 300 and "." in t:
+            if "人気" in t:
+              ninki = t
+            elif re.search(r'^\d+\.\d+$', t) and float(t) < 300:
               odds = t
-            elif "人気" in t or (t.isdigit() and int(t) <= 18):
-              if "人気" in t:
-                ninki = t
             elif t in ["逃", "先行", "差", "追"]:
               kyakushitsu = t
             elif re.search(r'^\d{2}\.\d$', t):
-              pass
-            elif re.search(r'^\d{2}\.\d$', t) == None and len(t) >= 2 and not t.isdigit():
+              agari = t
+            elif re.search(r'^\d+-\d+-\d+', t):
+              record = t
+            elif not t.isdigit() and len(t) >= 2 and not "人気" in t:
               kishu = t
-            elif re.search(r'^\d{2}\.\d$', t) == None and (t.replace('.', '', 1).isdigit() and float(t) >= 48 and float(t) <= 60):
-              kinryo = t
 
           parsed_rows.append({
               "日付": inp_date,
@@ -410,9 +412,9 @@ with tab3:
               "人気": ninki,
               "単勝オッズ": odds,
               "脚質": kyakushitsu,
-              "上がり3F": "",
-              "スピード指数": "",
-              "近走5走成績": "0-0-0-0",
+              "上がり3F": agari,
+              "スピード指数": speed,
+              "近走5走成績": record,
               "騎手": kishu,
               "斤量": kinryo,
           })
