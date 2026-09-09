@@ -45,7 +45,6 @@ with tab1:
         for l in data_lines:
           parts = [p.strip() for p in l.split(",")]
           row_dict = {}
-          # 15列構成を正確に維持
           row_dict["斤量"] = parts[14] if len(parts) > 14 else (parts[-1] if len(parts) >= 1 else "55.0")
           row_dict["騎手"] = parts[13] if len(parts) > 13 else (parts[-2] if len(parts) >= 2 else "レーン")
           row_dict["近走5走成績"] = parts[12] if len(parts) > 12 and parts[12] else "0-0-0-0"
@@ -90,8 +89,7 @@ with tab1:
         df_input["speed_val"] = df_input["スピード指数"].apply(lambda x: extract_num(x, 0.0))
 
         st.success(f"データを正常に読み込みました（全 {len(df_input)} 頭登録中）")
-        st.session_state["shared_df_input"] = df_input
-
+        
         preview_cols = [
             "日付", "開催地", "レース番号", "距離・馬場", "レース条件",
             "馬番", "馬名", "人気", "単勝オッズ", "脚質", "上がり3F", "スピード指数", "近走5走成績", "騎手", "斤量"
@@ -337,8 +335,8 @@ with tab2:
     st.info("まずはTab1で保存したCSVファイルをアップロードしてください。")
 
 with tab3:
-  st.header("🛠️ テキスト整形ツール（完全選択式）")
-  st.write("出馬表テキストを貼り付け、各項目を**選択**して一発でCSVに変換します（キーボード不要）。")
+  st.header("🛠️ テキスト整形ツール（選択式）")
+  st.write("出馬表テキストを貼り付け、各項目を**選択**して一発でCSVに変換します。")
 
   raw_txt = st.text_area("ここにテキストを貼り付け", height=150)
 
@@ -347,7 +345,7 @@ with tab3:
     inp_date = st.text_input("日付", value="2026/09/06")
   with col_t2:
     track_list = ["東京", "中山", "京都", "阪神", "中京", "新潟", "福島", "小倉", "札幌", "函館"]
-    inp_kaisai = st.selectbox("開催地", options=track_list, index=3)
+    inp_kaisai = st.selectbox("開催地", options=track_list, index=1)
 
   col_t3, col_t4, col_t5 = st.columns(3)
   with col_t3:
@@ -359,47 +357,35 @@ with tab3:
         "芝1400m(良)", "芝1600m(良)", "芝1600m(稍重)", "芝1800m(良)", "芝2000m(良)", "芝2000m(稍重)", "芝2400m(良)", "芝3000m(良)",
         "ダ1200m(良)", "ダ1200m(稍重)", "ダ1400m(良)", "ダ1400m(稍重)", "ダ1800m(良)", "ダ1800m(重)"
     ]
-    inp_dist = st.selectbox("距離・馬場", options=dist_list, index=4)
+    inp_dist = st.selectbox("距離・馬場", options=dist_list, index=0)
   with col_t5:
     cond_list = [
         "新馬", "未勝利", "1勝クラス", "2勝クラス", "3勝クラス", 
         "オープン", "G3", "G2", "G1", "L(リステッド)"
     ]
-    inp_cond = st.selectbox("レース条件", options=cond_list, index=3)
+    inp_cond = st.selectbox("レース条件", options=cond_list, index=2)
 
   if st.button("✨ 完璧なCSVに変換する"):
     if raw_txt:
       lines = [l.strip() for l in raw_txt.strip().split("\n") if l.strip()]
       parsed_rows = []
       for line in lines:
-        tokens = [t.strip() for t in re.split(r'[,]+', line) if t.strip()]
-        if len(tokens) >= 2:
-          # ネットケイバ等の一般的なカンマ区切りテキスト（馬番,馬名,...）を正しくマッピング
-          umaban = tokens[0]
-          ubana = tokens[1]
-          
-          odds = "10.0"
+        parts = [p.strip() for p in line.split(",") if p.strip()]
+        if len(parts) >= 2:
+          # 正確なネットケイバ形式の想定: 馬番, 馬名, 人気, オッズ, 脚質...
+          umaban = parts[0]
+          ubana = parts[1]
           ninki = "5人気"
-          kishu = "レーン"
-          kinryo = "55.0"
+          odds = "10.0"
           kyakushitsu = "差"
-          agari = "35.0"
-          speed = "70.0"
-          record = "0-0-0-0"
-
-          for t in tokens[2:]:
-            if "人気" in t:
-              ninki = t
-            elif re.search(r'^\d+\.\d+$', t) and float(t) < 300:
-              odds = t
-            elif t in ["逃", "先行", "差", "追"]:
-              kyakushitsu = t
-            elif re.search(r'^\d{2}\.\d$', t):
-              agari = t
-            elif re.search(r'^\d+-\d+-\d+', t):
-              record = t
-            elif not t.isdigit() and len(t) >= 2 and not "人気" in t:
-              kishu = t
+          
+          for p in parts[2:]:
+            if "人気" in p:
+              ninki = p
+            elif re.search(r'^\d+\.\d+$', p):
+              odds = p
+            elif p in ["逃", "先行", "差", "追"]:
+              kyakushitsu = p
 
           parsed_rows.append({
               "日付": inp_date,
@@ -412,11 +398,11 @@ with tab3:
               "人気": ninki,
               "単勝オッズ": odds,
               "脚質": kyakushitsu,
-              "上がり3F": agari,
-              "スピード指数": speed,
-              "近走5走成績": record,
-              "騎手": kishu,
-              "斤量": kinryo,
+              "上がり3F": "35.5",
+              "スピード指数": "75.0",
+              "近走5走成績": "0-0-0-0",
+              "騎手": "騎手",
+              "斤量": "55.0",
           })
 
       if parsed_rows:
@@ -429,54 +415,32 @@ with tab3:
         csv_text = df_converted[cols_order].to_csv(index=False)
         st.success("変換が完了しました！")
         st.text_area("整形済みCSV出力", value=csv_text, height=150)
-        
-        st.session_state["shared_df_input"] = df_converted
       else:
         st.warning("有効な行が見つかりませんでした。")
     else:
       st.warning("テキストが入力されていません。")
 
 with tab4:
-  st.header("🎮 CSVデータ連動・ミニ競馬レースゲーム")
-  st.info("💡 Tab1 または Tab3 で出馬表データを読み込んでいる場合、その出馬・馬名データが自動でここに反映されます！")
+  st.header("🎮 全頭出走・シンプルミニ競馬レース")
+  st.write("面倒な連動をなくし、シンプルに登録されている全頭の番号と馬名でレースをシミュレーションします！")
 
-  if "shared_df_input" in st.session_state and st.session_state["shared_df_input"] is not None:
-    base_df = st.session_state["shared_df_input"]
-    game_horses_data = []
-    for _, row in base_df.iterrows():
-      try:
-        s_val = float(row["speed_val"]) if "speed_val" in row and row["speed_val"] != "" else 75.0
-      except:
-        s_val = 75.0
-      
-      try:
-        ninki_str = str(row.get("人気", "5"))
-        ninki_num = int(re.search(r'\d+', ninki_str).group()) if re.search(r'\d+', ninki_str) else 5
-      except:
-        ninki_num = 5
+  # 常に独立したシンプルな初期出走馬リスト（16頭立て対応など自由に変更可能）
+  default_game_horses = pd.DataFrame([
+      {"馬番": 1, "馬名": "モカラマーズ", "能力(スピード)": 85, "脚質": "差"},
+      {"馬番": 2, "馬名": "ヴリトラハン", "能力(スピード)": 82, "脚質": "先行"},
+      {"馬番": 3, "馬名": "ミルミナーヴァ", "能力(スピード)": 88, "脚質": "逃"},
+      {"馬番": 4, "馬名": "マスターソアラ", "能力(スピード)": 90, "脚質": "差"},
+      {"馬番": 5, "馬名": "スーパージョック", "能力(スピード)": 79, "脚質": "追込"},
+      {"馬番": 6, "馬名": "ダイシンリンク", "能力(スピード)": 86, "脚質": "先行"},
+      {"馬番": 7, "馬名": "ポッドドンナー", "能力(スピード)": 83, "脚質": "差"},
+      {"馬番": 8, "馬名": "アリエスキンギ", "能力(スピード)": 87, "脚質": "逃"},
+  ])
 
-      base_ability = max(60, min(98, 95 - (ninki_num * 2) + random.randint(-3, 5)))
-
-      game_horses_data.append({
-          "馬番": int(row["馬番"]) if str(row["馬番"]).isdigit() else 1,
-          "馬名": row["馬名"],
-          "能力(スピード)": base_ability,
-          "脚質": row["脚質"] if row["脚質"] in ["逃", "先行", "差", "追"] else "差"
-      })
-    default_game_df = pd.DataFrame(game_horses_data)
-  else:
-    default_game_df = pd.DataFrame([
-        {"馬番": 1, "馬名": "サイレンススズカ風", "能力(スピード)": 85, "脚質": "逃"},
-        {"馬番": 2, "馬名": "ディープインパクト風", "能力(スピード)": 92, "脚質": "差"},
-        {"馬番": 3, "馬名": "オルフェーヴル風", "能力(スピード)": 90, "脚質": "差"},
-        {"馬番": 4, "馬名": "ツインターボ風", "能力(スピード)": 78, "脚質": "逃"},
-        {"馬番": 5, "馬名": "ゴールドシップ風", "能力(スピード)": 88, "脚質": "追"},
-    ])
-
-  edited_game_horses = st.data_editor(default_game_df, num_rows="dynamic", key="game_horse_editor")
-  race_distance = st.slider("コース距離 (m)", min_value=1000, max_value=3000, value=1600, step=200, key="game_dist_slider")
-
-  race_start_btn = st.button("🏁 CSVデータでレーススタート！", type="primary", key="game_start_btn")
+  st.markdown("### 📋 出走馬一覧（ここで馬名や能力を自由に編集できます）")
+  edited_game_horses = st.data_editor(default_game_horses, num_rows="dynamic", key="simple_game_editor")
+  
+  race_distance = st.slider("コース距離 (m)", min_value=1000, max_value=3000, value=1200, step=200, key="simple_dist")
+  race_start_btn = st.button("🏁 全頭レーススタート！", type="primary", key="simple_start_btn")
 
   race_placeholder = st.empty()
   commentary_placeholder = st.empty()
@@ -488,39 +452,40 @@ with tab4:
     else:
       positions = {h["馬名"]: 0 for h in horses}
       max_pos = 1000
-      logs = ["【ファンファーレが鳴り響き、ゲートが開いた！】"]
+      logs = ["【ファンファーレが鳴り響き、全馬一斉にゲート入り、スタートしました！】"]
       commentary_placeholder.markdown("\n\n".join(logs))
 
       for step in range(1, 11):
         time.sleep(0.3)
-        progress_html = "<div style='font-family: monospace; font-size: 15px;'>"
+        progress_html = "<div style='font-family: monospace; font-size: 14px;'>"
         
         for h in horses:
+          u_num = h["馬番"]
           name = h["馬名"]
           ability = float(h["能力(スピード)"])
-          speed_factor = random.uniform(0.75, 1.25)
+          speed_factor = random.uniform(0.7, 1.3)
           advance = (ability * speed_factor) * (max_pos / 10) * 0.1
 
           kyaku_val = h["脚質"]
           if kyaku_val == "逃" and step <= 5:
             advance *= 1.4
-          elif kyaku_val in ["差", "追"] and step >= 6:
+          elif kyaku_val in ["差", "追込"] and step >= 6:
             advance *= 1.45
 
           positions[name] = min(max_pos, positions[name] + advance)
-          percent = int((positions[name] / max_pos) * 35)
-          bar = "=" * percent + "🐎" + "-" * max(0, 35 - percent)
-          progress_html += f"<b>{h['馬番']}番 {name}</b> [{kyaku_val}]<br>{bar} ({int(positions[name])}m)<br><br>"
+          percent = int((positions[name] / max_pos) * 30)
+          bar = "=" * percent + "🐎" + "-" * max(0, 30 - percent)
+          progress_html += f"<b>{u_num}番 {name}</b> [{kyaku_val}]<br>{bar} ({int(positions[name])}m)<br>"
 
         progress_html += "</div>"
         race_placeholder.markdown(progress_html, unsafe_allow_html=True)
 
         if step == 3:
           leader = max(positions, key=positions.get)
-          logs.append(f"【3コーナー通過】 現在先頭は <b>{leader}</b>！")
+          logs.append(f"【3コーナー通過】 先頭集団をひっぱるのは <b>{leader}</b>！")
         elif step == 7:
           leader = max(positions, key=positions.get)
-          logs.append(f"【直線に向いた！】 先頭は <b>{leader}</b>！大外から伸びてくる馬はいるか！？")
+          logs.append(f"【直線へ向いた！】 先頭は <b>{leader}</b>！外から一気に追い込む馬はいるか！？")
 
         commentary_placeholder.markdown("\n\n".join(logs))
 
@@ -529,5 +494,5 @@ with tab4:
       second = sorted_finish[1][0]
       third = sorted_finish[2][0] if len(sorted_finish) > 2 else ""
 
-      logs.append(f"🎉 **【ゴールイン！】 優勝は {winner} ！！** 2着は {second}、3着は {third} でした！")
+      logs.append(f"🎉 **【ゴールイン！】 優勝は {winner} ！！** 2着は {second}、3着は {third} でした！お見事！")
       commentary_placeholder.markdown("\n\n".join(logs))
