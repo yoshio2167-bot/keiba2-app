@@ -90,7 +90,7 @@ with tab1:
 
         st.success(f"データを正常に読み込みました（全 {len(df_input)} 頭登録中）")
         
-        # セッションにレースデータを保存（Tab4のミニゲームでも共有利用）
+        # データをセッションに保存（Tab4のミニゲームと完全連動）
         st.session_state["shared_df_input"] = df_input
 
         preview_cols = [
@@ -416,29 +416,42 @@ with tab3:
         csv_text = df_converted[cols_order].to_csv(index=False)
         st.success("変換が完了しました！")
         st.text_area("整形済みCSV出力", value=csv_text, height=150)
+        
+        # 整形ツール側でもCSVデータが読まれたらセッションに一時保存してTab4で使えるようにする
+        st.session_state["shared_df_input"] = df_converted
       else:
         st.warning("有効な行が見つかりませんでした。")
     else:
       st.warning("テキストが入力されていません。")
 
 with tab4:
-  st.header("🎮 ダビスタ風ミニ競馬レースゲーム")
-  st.write("Tab1で読み込んだ出走馬データをそのまま利用して、番号と馬が画面を駆け抜けるレース実況シミュレーションを楽しめます！")
+  st.header("🎮 CSVデータ連動・ミニ競馬レースゲーム")
+  st.info("💡 Tab1 または Tab3 で出馬表データを読み込んでいる場合、その出馬・馬名データが自動でここに反映されます！")
 
-  # Tab1のデータがあればそれを初期データとして活用、なければデフォルト馬を用意
+  # 共有データがあればそれを優先利用、なければデフォルト馬
   if "shared_df_input" in st.session_state and st.session_state["shared_df_input"] is not None:
     base_df = st.session_state["shared_df_input"]
     game_horses_data = []
     for _, row in base_df.iterrows():
-      # スピード指数やオッズから能力値を簡易算出
       try:
-        s_val = float(row["speed_val"]) if row["speed_val"] != "" else 75.0
+        s_val = float(row["speed_val"]) if "speed_val" in row and row["speed_val"] != "" else 75.0
       except:
         s_val = 75.0
+      
+      # スピード指数や人気を元にゲーム内の能力値を動的決定
+      try:
+        ninki_str = str(row.get("人気", "5"))
+        ninki_num = int(re.search(r'\d+', ninki_str).group()) if re.search(r'\d+', ninki_str) else 5
+      except:
+        ninki_num = 5
+
+      # 上位人気の馬ほど能力を高く設定、穴馬も一発のロマンを持たせる
+      base_ability = max(60, min(98, 95 - (ninki_num * 2) + random.randint(-3, 5)))
+
       game_horses_data.append({
           "馬番": int(row["馬番"]) if str(row["馬番"]).isdigit() else 1,
           "馬名": row["馬名"],
-          "能力(スピード)": min(99, max(60, int(s_val if s_val > 50 else 75))),
+          "能力(スピード)": base_ability,
           "脚質": row["脚質"] if row["脚質"] in ["逃", "先行", "差", "追"] else "差"
       })
     default_game_df = pd.DataFrame(game_horses_data)
@@ -454,7 +467,7 @@ with tab4:
   edited_game_horses = st.data_editor(default_game_df, num_rows="dynamic", key="game_horse_editor")
   race_distance = st.slider("コース距離 (m)", min_value=1000, max_value=3000, value=1600, step=200, key="game_dist_slider")
 
-  race_start_btn = st.button("🏁 レーススタート！", type="primary", key="game_start_btn")
+  race_start_btn = st.button("🏁 CSVデータでレーススタート！", type="primary", key="game_start_btn")
 
   race_placeholder = st.empty()
   commentary_placeholder = st.empty()
@@ -476,14 +489,14 @@ with tab4:
         for h in horses:
           name = h["馬名"]
           ability = float(h["能力(スピード)"])
-          speed_factor = random.uniform(0.8, 1.2)
+          speed_factor = random.uniform(0.75, 1.25) # 展開のあや（波乱要素）
           advance = (ability * speed_factor) * (max_pos / 10) * 0.1
 
           kyaku_val = h["脚質"]
           if kyaku_val == "逃" and step <= 5:
-            advance *= 1.35
-          elif kyaku_val in ["差", "追"] and step >= 6:
             advance *= 1.4
+          elif kyaku_val in ["差", "追"] and step >= 6:
+            advance *= 1.45
 
           positions[name] = min(max_pos, positions[name] + advance)
           percent = int((positions[name] / max_pos) * 35)
@@ -498,7 +511,7 @@ with tab4:
           logs.append(f"【3コーナー通過】 現在先頭は <b>{leader}</b>！")
         elif step == 7:
           leader = max(positions, key=positions.get)
-          logs.append(f"【直線に向いた！】 先頭は <b>{leader}</b>！後方からの追い込みは届くか！？")
+          logs.append(f"【直線に向いた！】 先頭は <b>{leader}</b>！大外から伸びてくる馬はいるか！？")
 
         commentary_placeholder.markdown("\n\n".join(logs))
 
