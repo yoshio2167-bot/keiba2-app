@@ -14,7 +14,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "🚀 能力評価＆荒れ度判定",
     "📊 検証・自動判定記録",
     "🛠️ スクショ・テキスト整形",
-    "🎮 ミニ競馬レース"
+    "🎮 リアルタイム競馬レース実況"
 ])
 
 with tab1:
@@ -372,7 +372,6 @@ with tab3:
       for line in lines:
         parts = [p.strip() for p in line.split(",") if p.strip()]
         if len(parts) >= 2:
-          # 正確なネットケイバ形式の想定: 馬番, 馬名, 人気, オッズ, 脚質...
           umaban = parts[0]
           ubana = parts[1]
           ninki = "5人気"
@@ -421,26 +420,27 @@ with tab3:
       st.warning("テキストが入力されていません。")
 
 with tab4:
-  st.header("🎮 全頭出走・シンプルミニ競馬レース")
-  st.write("面倒な連動をなくし、シンプルに登録されている全頭の番号と馬名でレースをシミュレーションします！")
+  st.header("🏇 番号と馬名だけのシンプル競馬レース実況")
+  st.write("面倒な自動連動や複雑な設定は一切なし！番号と名前だけで、全頭がトラックを一周してゴールを駆け抜ける実況アニメーションです。")
 
-  # 常に独立したシンプルな初期出走馬リスト（16頭立て対応など自由に変更可能）
+  # デフォルトのシンプルな出走馬（全頭一覧）
   default_game_horses = pd.DataFrame([
-      {"馬番": 1, "馬名": "モカラマーズ", "能力(スピード)": 85, "脚質": "差"},
-      {"馬番": 2, "馬名": "ヴリトラハン", "能力(スピード)": 82, "脚質": "先行"},
-      {"馬番": 3, "馬名": "ミルミナーヴァ", "能力(スピード)": 88, "脚質": "逃"},
-      {"馬番": 4, "馬名": "マスターソアラ", "能力(スピード)": 90, "脚質": "差"},
-      {"馬番": 5, "馬名": "スーパージョック", "能力(スピード)": 79, "脚質": "追込"},
-      {"馬番": 6, "馬名": "ダイシンリンク", "能力(スピード)": 86, "脚質": "先行"},
-      {"馬番": 7, "馬名": "ポッドドンナー", "能力(スピード)": 83, "脚質": "差"},
-      {"馬番": 8, "馬名": "アリエスキンギ", "能力(スピード)": 87, "脚質": "逃"},
+      {"馬番": 1, "馬名": "モカラマーズ", "脚質": "差"},
+      {"馬番": 2, "馬名": "ヴリトラハン", "脚質": "先行"},
+      {"馬番": 3, "馬名": "ミルミナーヴァ", "脚質": "逃"},
+      {"馬番": 4, "馬名": "マスターソアラ", "脚質": "差"},
+      {"馬番": 5, "馬名": "スーパージョック", "脚質": "追込"},
+      {"馬番": 6, "馬名": "ダイシンリンク", "脚質": "先行"},
+      {"馬番": 7, "馬名": "ポッドドンナー", "脚質": "差"},
+      {"馬番": 8, "馬名": "アリエスキンギ", "脚質": "逃"},
+      {"馬番": 9, "馬名": "タママノモリ", "脚質": "差"},
+      {"馬番": 10, "馬名": "ビカラ", "脚質": "逃"},
   ])
 
-  st.markdown("### 📋 出走馬一覧（ここで馬名や能力を自由に編集できます）")
-  edited_game_horses = st.data_editor(default_game_horses, num_rows="dynamic", key="simple_game_editor")
+  st.markdown("### 📋 出走馬リスト（自由に馬番や名前を変更できます）")
+  edited_game_horses = st.data_editor(default_game_horses, num_rows="dynamic", key="pure_game_editor")
   
-  race_distance = st.slider("コース距離 (m)", min_value=1000, max_value=3000, value=1200, step=200, key="simple_dist")
-  race_start_btn = st.button("🏁 全頭レーススタート！", type="primary", key="simple_start_btn")
+  race_start_btn = st.button("🏁 レーススタート！", type="primary", key="pure_start_btn")
 
   race_placeholder = st.empty()
   commentary_placeholder = st.empty()
@@ -450,49 +450,54 @@ with tab4:
     if len(horses) < 2:
       st.error("馬を2頭以上登録してください！")
     else:
-      positions = {h["馬名"]: 0 for h in horses}
+      # 各馬の進行度（0m 〜 1000mゴール）
+      positions = {f"{h['馬番']}番 {h['馬名']}": 0 for h in horses}
       max_pos = 1000
-      logs = ["【ファンファーレが鳴り響き、全馬一斉にゲート入り、スタートしました！】"]
+      logs = ["【ファンファーレが鳴り響き、ゲートが開いた！全頭が一斉に飛び出した！】"]
       commentary_placeholder.markdown("\n\n".join(logs))
 
+      # 10ステップでゴールまで駆け抜ける実況アニメーション
       for step in range(1, 11):
-        time.sleep(0.3)
-        progress_html = "<div style='font-family: monospace; font-size: 14px;'>"
+        time.sleep(0.35)
+        track_html = "<div style='font-family: monospace; font-size: 15px; background-color: #0e1117; padding: 15px; border-radius: 10px;'>"
         
         for h in horses:
-          u_num = h["馬番"]
-          name = h["馬名"]
-          ability = float(h["能力(スピード)"])
+          key_name = f"{h['馬番']}番 {h['馬名']}"
+          kyaku = h["脚質"]
+          
+          # ランダムなスピードと脚質ごとの挙動
           speed_factor = random.uniform(0.7, 1.3)
-          advance = (ability * speed_factor) * (max_pos / 10) * 0.1
+          advance = speed_factor * 105
 
-          kyaku_val = h["脚質"]
-          if kyaku_val == "逃" and step <= 5:
-            advance *= 1.4
-          elif kyaku_val in ["差", "追込"] and step >= 6:
+          if kyaku == "逃" and step <= 5:
+            advance *= 1.35
+          elif kyaku in ["差", "追込"] and step >= 6:
             advance *= 1.45
 
-          positions[name] = min(max_pos, positions[name] + advance)
-          percent = int((positions[name] / max_pos) * 30)
-          bar = "=" * percent + "🐎" + "-" * max(0, 30 - percent)
-          progress_html += f"<b>{u_num}番 {name}</b> [{kyaku_val}]<br>{bar} ({int(positions[name])}m)<br>"
+          positions[key_name] = min(max_pos, positions[key_name] + advance)
+          
+          # トラックを走る馬のバー表示（【GOAL】に向かって進む）
+          percent = int((positions[key_name] / max_pos) * 35)
+          bar = "=" * percent + "🐎" + "-" * max(0, 35 - percent)
+          track_html += f"<b>{key_name}</b> [{kyaku}]<br>🏁[{bar}] {int(positions[key_name])}m<br><br>"
 
-        progress_html += "</div>"
-        race_placeholder.markdown(progress_html, unsafe_allow_html=True)
+        track_html += "</div>"
+        race_placeholder.markdown(track_html, unsafe_allow_html=True)
 
         if step == 3:
           leader = max(positions, key=positions.get)
-          logs.append(f"【3コーナー通過】 先頭集団をひっぱるのは <b>{leader}</b>！")
+          logs.append(f"【3コーナー通過】 現在の先頭は <b>{leader}</b>！")
         elif step == 7:
           leader = max(positions, key=positions.get)
-          logs.append(f"【直線へ向いた！】 先頭は <b>{leader}</b>！外から一気に追い込む馬はいるか！？")
+          logs.append(f"【最後の直線へ向いた！】 先頭は <b>{leader}</b>！外から一気に各馬が追い上げる！")
 
         commentary_placeholder.markdown("\n\n".join(logs))
 
+      # ゴール順位の決定
       sorted_finish = sorted(positions.items(), key=lambda x: x[1], reverse=True)
       winner = sorted_finish[0][0]
       second = sorted_finish[1][0]
       third = sorted_finish[2][0] if len(sorted_finish) > 2 else ""
 
-      logs.append(f"🎉 **【ゴールイン！】 優勝は {winner} ！！** 2着は {second}、3着は {third} でした！お見事！")
+      logs.append(f"🏆 **【ゴールイン！！】**<br>🥇 1着: <b>{winner}</b><br>🥈 2着: <b>{second}</b><br>🥉 3着: <b>{third}</b>")
       commentary_placeholder.markdown("\n\n".join(logs))
