@@ -89,8 +89,6 @@ with tab1:
         df_input["speed_val"] = df_input["スピード指数"].apply(lambda x: extract_num(x, 0.0))
 
         st.success(f"データを正常に読み込みました（全 {len(df_input)} 頭登録中）")
-        
-        # データをセッションに保存（Tab4のミニゲームと完全連動）
         st.session_state["shared_df_input"] = df_input
 
         preview_cols = [
@@ -338,8 +336,8 @@ with tab2:
     st.info("まずはTab1で保存したCSVファイルをアップロードしてください。")
 
 with tab3:
-  st.header("🛠️ Geminiテキスト・スクショ整形ツール")
-  st.write("出馬表テキストを貼り付けると自動で解析します。")
+  st.header("🛠️ テキスト整形ツール（完全選択式）")
+  st.write("出馬表テキストを貼り付け、各項目を**選択**して一発でCSVに変換します（キーボード不要）。")
 
   raw_txt = st.text_area("ここにテキストを貼り付け", height=150)
 
@@ -347,15 +345,28 @@ with tab3:
   with col_t1:
     inp_date = st.text_input("日付", value="2026/09/06")
   with col_t2:
-    inp_kaisai = st.text_input("開催地", value="中山")
+    track_list = ["東京", "中山", "京都", "阪神", "中京", "新潟", "福島", "小倉", "札幌", "函館"]
+    inp_kaisai = st.selectbox("開催地", options=track_list, index=1)
 
   col_t3, col_t4, col_t5 = st.columns(3)
   with col_t3:
-    inp_rnum = st.text_input("レース番号", value="12R")
+    r_list = [f"{i}R" for i in range(1, 13)]
+    inp_rnum = st.selectbox("レース番号", options=r_list, index=11)
   with col_t4:
-    inp_dist = st.text_input("距離・馬場", value="芝1200m(雨 稍重)")
+    # 距離・馬場を選択式に変更
+    dist_list = [
+        "芝1200m(良)", "芝1200m(稍重)", "芝1200m(重)", "芝1200m(不良)",
+        "芝1400m(良)", "芝1600m(良)", "芝1600m(稍重)", "芝1800m(良)", "芝2000m(良)", "芝2000m(稍重)", "芝2400m(良)", "芝3000m(良)",
+        "ダ1200m(良)", "ダ1200m(稍重)", "ダ1400m(良)", "ダ1400m(稍重)", "ダ1800m(良)", "ダ1800m(重)"
+    ]
+    inp_dist = st.selectbox("距離・馬場", options=dist_list, index=0)
   with col_t5:
-    inp_cond = st.text_input("レース条件", value="3歳上1勝クラス")
+    # 条件を選択式に変更
+    cond_list = [
+        "新馬", "未勝利", "1勝クラス", "2勝クラス", "3勝クラス", 
+        "オープン", "G3", "G2", "G1", "L(リステッド)"
+    ]
+    inp_cond = st.selectbox("レース条件", options=cond_list, index=2)
 
   if st.button("✨ 完璧なCSVに変換する"):
     if raw_txt:
@@ -417,7 +428,6 @@ with tab3:
         st.success("変換が完了しました！")
         st.text_area("整形済みCSV出力", value=csv_text, height=150)
         
-        # 整形ツール側でもCSVデータが読まれたらセッションに一時保存してTab4で使えるようにする
         st.session_state["shared_df_input"] = df_converted
       else:
         st.warning("有効な行が見つかりませんでした。")
@@ -428,7 +438,6 @@ with tab4:
   st.header("🎮 CSVデータ連動・ミニ競馬レースゲーム")
   st.info("💡 Tab1 または Tab3 で出馬表データを読み込んでいる場合、その出馬・馬名データが自動でここに反映されます！")
 
-  # 共有データがあればそれを優先利用、なければデフォルト馬
   if "shared_df_input" in st.session_state and st.session_state["shared_df_input"] is not None:
     base_df = st.session_state["shared_df_input"]
     game_horses_data = []
@@ -438,14 +447,12 @@ with tab4:
       except:
         s_val = 75.0
       
-      # スピード指数や人気を元にゲーム内の能力値を動的決定
       try:
         ninki_str = str(row.get("人気", "5"))
         ninki_num = int(re.search(r'\d+', ninki_str).group()) if re.search(r'\d+', ninki_str) else 5
       except:
         ninki_num = 5
 
-      # 上位人気の馬ほど能力を高く設定、穴馬も一発のロマンを持たせる
       base_ability = max(60, min(98, 95 - (ninki_num * 2) + random.randint(-3, 5)))
 
       game_horses_data.append({
@@ -489,7 +496,7 @@ with tab4:
         for h in horses:
           name = h["馬名"]
           ability = float(h["能力(スピード)"])
-          speed_factor = random.uniform(0.75, 1.25) # 展開のあや（波乱要素）
+          speed_factor = random.uniform(0.75, 1.25)
           advance = (ability * speed_factor) * (max_pos / 10) * 0.1
 
           kyaku_val = h["脚質"]
