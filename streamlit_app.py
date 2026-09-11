@@ -20,7 +20,7 @@ with tab1:
       "CSVデータ貼り付け欄",
       placeholder=(
           "日付,開催地,レース番号,距離・馬場,レース条件,馬番,馬名,人気,単勝オッズ,脚質,上がり3F,スピード指数,近走5走成績,騎手,斤量\n"
-          "2026/09/06,中山,12R,芝1200m(雨 稍重),3歳上1勝クラス,1,ショウナンアキツ,12人気,59.3,差,,,,0-0-0-0,石橋脩,58.0"
+          "2026/09/06,中山,12R,芝1200m(雨 稍重),3歳上1勝クラス,1,ショウナンアキツ,12人気,59.3,差,34.5,,0-0-0-0,石橋脩,58.0"
       ),
       height=180,
   )
@@ -110,6 +110,13 @@ with tab1:
           except:
             pass
 
+          try:
+            f_val = float(row["上がり3F_val"])
+            if 30.0 <= f_val <= 42.0:
+              base_score += (40.0 - f_val) * 0.8
+          except:
+            pass
+
           return max(1.0, base_score)
 
         df_res["ベース評価"] = df_res.apply(calc_enhanced_score, axis=1)
@@ -147,7 +154,7 @@ with tab1:
         display_cols = [
             "開催地", "レース番号", "距離・馬場", "レース条件",
             "馬番", "馬名", "人気", "単勝オッズ",
-            "シミュ勝率_str", "シミュ複勝率_str", "AI期待回収率_str", "脚質", "騎手"
+            "シミュ勝率_str", "シミュ複勝率_str", "AI期待回収率_str", "脚質", "上がり3F", "騎手"
         ]
         available_cols = [c for c in display_cols if c in df_ranked.columns]
         df_display = df_ranked[available_cols]
@@ -363,7 +370,7 @@ with tab3:
 
   raw_txt = st.text_area(
       "ここにGeminiの文字起こしテキスト等をそのまま貼り付け",
-      placeholder="例:\n1 ショウナンアキツ 牡5 58.0 石橋脩 59.3 12人気 差",
+      placeholder="例:\n1 ショウナンアキツ 牡5 58.0 石橋脩 59.3 12人気 差 34.5",
       height=150,
   )
 
@@ -407,8 +414,16 @@ with tab3:
           kishu = "石橋脩"
           kinryo = "58.0"
           kyakushitsu = "差"
+          agari = ""
 
           for t in tokens[2:]:
+            # 上がり3Fの検出（30.0〜42.0の小数を優先的にキャッチ）
+            if re.search(r'^\d{2}\.\d$', t):
+              val = float(t)
+              if 30.0 <= val <= 42.0 and not agari:
+                agari = t
+                continue
+
             if re.search(r'^\d+\.?\d*$', t) and float(t) < 300 and "." in t:
               odds = t
             elif "人気" in t or (t.isdigit() and int(t) <= 18):
@@ -416,11 +431,9 @@ with tab3:
                 ninki = t
             elif t in ["逃", "先行", "差", "追"]:
               kyakushitsu = t
-            elif re.search(r'^\d{2}\.\d$', t):
-              pass
-            elif re.search(r'^\d{2}\.\d$', t) == None and len(t) >= 2 and not t.isdigit():
+            elif len(t) >= 2 and not t.isdigit() and "." not in t:
               kishu = t
-            elif re.search(r'^\d{2}\.\d$', t) == None and (t.replace('.', '', 1).isdigit() and float(t) >= 48 and float(t) <= 60):
+            elif t.replace('.', '', 1).isdigit() and 48 <= float(t) <= 60:
               kinryo = t
 
           parsed_rows.append({
@@ -434,7 +447,7 @@ with tab3:
               "人気": ninki,
               "単勝オッズ": odds,
               "脚質": kyakushitsu,
-              "上がり3F": "",
+              "上がり3F": agari,
               "スピード指数": "",
               "近走5走成績": "0-0-0-0",
               "騎手": kishu,
