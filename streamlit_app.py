@@ -20,7 +20,7 @@ with tab1:
       "CSVデータ貼り付け欄",
       placeholder=(
           "日付,開催地,レース番号,距離・馬場,レース条件,馬番,馬名,人気,単勝オッズ,脚質,上がり3F,スピード指数,近走5走成績,騎手,斤量\n"
-          "2026/09/06,中山,12R,芝1200m(雨 稍重),3歳上1勝クラス,1,ショウナンアキツ,12人気,59.3,差,34.5,,0-0-0-0,石橋脩,58.0"
+          "2026/09/06,阪神,11R,芝1200m(良),セントウルS G2,1,ママコチャ,5人気,10.8,先,0,0,7-5-3-10,武豊,56.0"
       ),
       height=180,
   )
@@ -32,32 +32,33 @@ with tab1:
       if len(lines) > 0:
         first_line = lines[0]
         has_header = "馬番" in first_line or "馬名" in first_line or "日付" in first_line
-        
         data_lines = lines[1:] if has_header else lines
 
         parsed_rows = []
         for l in data_lines:
           parts = [p.strip() for p in l.split(",")]
-          row_dict = {}
-          row_dict["斤量"] = parts[-1] if len(parts) >= 1 else "55.0"
-          row_dict["騎手"] = parts[-2] if len(parts) >= 2 else "レーン"
-          row_dict["近走5走成績"] = parts[-3] if len(parts) >= 3 and parts[-3] else "0-0-0-0"
-          row_dict["スピード指数"] = parts[-4] if len(parts) >= 4 else ""
-          row_dict["上がり3F"] = parts[-5] if len(parts) >= 5 else ""
-          row_dict["脚質"] = parts[-6] if len(parts) >= 6 else "差"
-          row_dict["単勝オッズ"] = parts[-7] if len(parts) >= 7 else "10.0"
-          row_dict["人気"] = parts[-8] if len(parts) >= 8 else "5人気"
-          row_dict["馬名"] = parts[-9] if len(parts) >= 9 else ""
-          row_dict["馬番"] = parts[-10] if len(parts) >= 10 else "1"
-          row_dict["レース条件"] = parts[-11] if len(parts) >= 11 else "3歳上1勝クラス"
-          row_dict["距離・馬場"] = parts[-12] if len(parts) >= 12 else "芝1200m(雨 稍重)"
-          row_dict["レース番号"] = parts[-13] if len(parts) >= 13 else "12R"
-          row_dict["開催地"] = parts[-14] if len(parts) >= 14 else "中山"
-          row_dict["日付"] = parts[-15] if len(parts) >= 15 else "2026/09/06"
+          if len(parts) >= 15:
+            row_dict = {
+                "日付": parts[0],
+                "開催地": parts[1],
+                "レース番号": parts[2],
+                "距離・馬場": parts[3],
+                "レース条件": parts[4],
+                "馬番": parts[5],
+                "馬名": parts[6],
+                "人気": parts[7],
+                "単勝オッズ": parts[8],
+                "脚質": parts[9],
+                "上がり3F": parts[10],
+                "スピード指数": parts[11],
+                "近走5走成績": parts[12],
+                "騎手": parts[13],
+                "斤量": parts[14],
+            }
+            parsed_rows.append(row_dict)
 
-          parsed_rows.append(row_dict)
-
-        df_input = pd.DataFrame(parsed_rows)
+        if parsed_rows:
+          df_input = pd.DataFrame(parsed_rows)
 
       if df_input is not None and not df_input.empty:
         def extract_num(val, default=5.0):
@@ -101,23 +102,18 @@ with tab1:
           except:
             odds = 10.0
           
-          base_score = (1.0 / odds) * 100.0
+          # オッズと上がり3F（タイムが良い＝数値が小さい）を総合評価に反映
+          base_score = max(5.0, 120.0 / (np.log(odds + 1.0) + 0.5))
           
-          try:
-            s_val = float(row["speed_val"])
-            if s_val > 0:
-              base_score += (s_val - 70.0) * 0.5
-          except:
-            pass
-
           try:
             f_val = float(row["上がり3F_val"])
             if 30.0 <= f_val <= 42.0:
-              base_score += (40.0 - f_val) * 0.8
+              # 上がりが速いほど加点（例: 31.7秒なら高評価）
+              base_score += (40.0 - f_val) * 4.5
           except:
             pass
 
-          return max(1.0, base_score)
+          return base_score
 
         df_res["ベース評価"] = df_res.apply(calc_enhanced_score, axis=1)
 
@@ -126,11 +122,10 @@ with tab1:
         place_counts = np.zeros(len(df_res))
 
         np.random.seed(42)
+        scores_arr = df_res["ベース評価"].values
         for _ in range(n_simulations):
-          noise = np.random.normal(
-              0, df_res["ベース評価"].values * 0.25, size=len(df_res)
-          )
-          sim_scores = df_res["ベース評価"].values + noise
+          noise = np.random.normal(0, np.mean(scores_arr) * 0.35, size=len(df_res))
+          sim_scores = scores_arr + noise
           top_indices = np.argsort(sim_scores)[::-1]
           
           winner_idx = top_indices[0]
@@ -160,8 +155,8 @@ with tab1:
         df_display = df_ranked[available_cols]
         st.dataframe(df_display, use_container_width=True)
 
-        kaisai_title = str(df_display["開催地"].iloc[0]) if not df_display["開催地"].empty else "中山"
-        r_num_title = str(df_ranked["レース番号"].iloc[0]) if not df_ranked["レース番号"].empty else "12R"
+        kaisai_title = str(df_display["開催地"].iloc[0]) if not df_display["開催地"].empty else "阪神"
+        r_num_title = str(df_ranked["レース番号"].iloc[0]) if not df_ranked["レース番号"].empty else "11R"
         file_prefix = f"{kaisai_title}{r_num_title}"
 
         top1 = df_ranked.iloc[0] if len(df_ranked) > 0 else None
@@ -257,10 +252,10 @@ with tab2:
     ]
 
     date_val = str(df_saved["日付"].iloc[0]) if "日付" in df_saved.columns and not df_saved["日付"].empty else "2026/09/06"
-    kaisai_val = str(df_saved["開催地"].iloc[0]) if "開催地" in df_saved.columns and not df_saved["開催地"].empty else "中山"
-    r_num_val = str(df_saved["レース番号"].iloc[0]) if "レース番号" in df_saved.columns and not df_saved["レース番号"].empty else "12R"
-    dist_val = str(df_saved["距離・馬場"].iloc[0]) if "距離・馬場" in df_saved.columns and not df_saved["距離・馬場"].empty else "芝1200m(雨 稍重)"
-    cond_val = str(df_saved["レース条件"].iloc[0]) if "レース条件" in df_saved.columns and not df_saved["レース条件"].empty else "3歳上1勝クラス"
+    kaisai_val = str(df_saved["開催地"].iloc[0]) if "開催地" in df_saved.columns and not df_saved["開催地"].empty else "阪神"
+    r_num_val = str(df_saved["レース番号"].iloc[0]) if "レース番号" in df_saved.columns and not df_saved["レース番号"].empty else "11R"
+    dist_val = str(df_saved["距離・馬場"].iloc[0]) if "距離・馬場" in df_saved.columns and not df_saved["距離・馬場"].empty else "芝1200m(良)"
+    cond_val = str(df_saved["レース条件"].iloc[0]) if "レース条件" in df_saved.columns and not df_saved["レース条件"].empty else "セントウルS G2"
 
     top1_row = df_saved.iloc[0]
     win_rate_val = str(top1_row.get("シミュ勝率", top1_row.get("シミュ勝率_str", "0%")))
@@ -365,118 +360,38 @@ with tab2:
 with tab3:
   st.header("🛠️ Geminiテキスト・スクショ整形ツール")
   st.write(
-      "ネット競馬やGeminiでOCR（文字起こし）した生の出馬表テキストをここに貼り付けると、アプリが自動で解析して正しい15列のCSVに一瞬で整形します。"
+      "ご提示いただいたようなカンマ区切りの出馬表データをここに貼り付けると、アプリが自動で15列の正しいフォーマットに完璧に整えます。"
   )
 
   raw_txt = st.text_area(
-      "ここにGeminiの文字起こしテキスト等をそのまま貼り付け",
-      placeholder="例:\nG2,16,タマモイカロス,9人気,30.8,外,33.4,0-3-3-1-3,池添謙一,57.0",
+      "ここにカンマ区切りの出馬表データを貼り付け",
+      placeholder="2026/09/06,阪神,11R,芝1200m(良),セントウルS G2,1,ママコチャ...",
       height=150,
   )
-
-  col_t1, col_t2 = st.columns(2)
-  with col_t1:
-    inp_date = st.text_input("基本設定：日付", value="2026/09/06")
-  with col_t2:
-    track_list = ["東京", "中山", "京都", "阪神", "中京", "新潟", "福島", "小倉", "札幌", "函館"]
-    inp_kaisai = st.selectbox("基本設定：開催地", options=track_list, index=1)
-
-  col_t3, col_t4, col_t5 = st.columns(3)
-  with col_t3:
-    r_list = [f"{i}R" for i in range(1, 13)]
-    inp_rnum = st.selectbox("レース番号", options=r_list, index=11)
-  with col_t4:
-    dist_list = [
-        "芝1200m(良)", "芝1200m(稍重)", "芝1200m(重)", "芝1200m(不良)",
-        "芝1400m(良)", "芝1600m(良)", "芝1600m(稍重)", "芝1800m(良)", "芝2000m(良)", "芝2000m(稍重)", "芝2400m(良)", "芝3000m(良)",
-        "ダ1200m(良)", "ダ1200m(稍重)", "ダ1400m(良)", "ダ1400m(稍重)", "ダ1800m(良)", "ダ1800m(重)"
-    ]
-    inp_dist = st.selectbox("距離・馬場", options=dist_list, index=0)
-  with col_t5:
-    cond_list = [
-        "新馬", "未勝利", "1勝クラス", "2勝クラス", "3勝クラス", 
-        "オープン", "G3", "G2", "G1", "L(リステッド)"
-    ]
-    inp_cond = st.selectbox("レース条件", options=cond_list, index=2)
 
   if st.button("✨ 完璧なCSVに変換する"):
     if raw_txt:
       lines = [l.strip() for l in raw_txt.strip().split("\n") if l.strip()]
       parsed_rows = []
       for line in lines:
-        # カンマ区切りまたはスペース・タブ区切りに対応
-        parts = [p.strip() for p in re.split(r'[,]+', line)]
-        if len(parts) >= 2:
-          # カンマ区切りの各要素を安全に取得
-          # 例: G2, 16, タマモイカロス, 9人気, 30.8, 外, 33.4, 0-3-3-1-3, 池添謙一, 57.0
-          umaban = parts[1] if len(parts) > 1 and parts[1].isdigit() else parts[0]
-          ubana = parts[2] if len(parts) > 2 else (parts[1] if len(parts) > 1 else "")
-          
-          ninki = "5人気"
-          odds = "10.0"
-          kyakushitsu = "差"
-          agari = ""
-          record = "0-0-0-0"
-          kishu = "レーン"
-          kinryo = "55.0"
-
-          # 各パーツからパターンマッチで確実に拾い出す
-          for p in parts:
-            if "人気" in p or re.search(r'^\d+人気$', p):
-              ninki = p
-            elif re.search(r'^\d+\.\d+$', p):
-              val = float(p)
-              # オッズっぽい数値 (300未満で小数点あり、かつ上がり3Fの範囲外か未設定)
-              if val < 300 and (val < 30.0 or val > 42.0) and odds == "10.0":
-                odds = p
-              # 上がり3Fっぽい数値 (30.0〜42.0)
-              elif 30.0 <= val <= 42.0:
-                agari = p
-            elif p in ["逃", "先行", "差", "追", "外", "良", "稍", "重", "不"]:
-              if p in ["逃", "先行", "差", "追"]:
-                kyakushitsu = p
-            elif re.search(r'^\d+-\d+-\d+', p):
-              record = p
-            elif re.search(r'^\d{2}\.\d$', p):
-              val = float(p)
-              if 30.0 <= val <= 42.0:
-                agari = p
-            elif re.search(r'^\d{2}\.\d$', p) is None and len(p) >= 2 and not p.isdigit() and "-" not in p and "人気" not in p:
-              # 名前の次以降にあって数値でないものは騎手の可能性が高い
-              if p != ubana:
-                kishu = p
-            elif re.search(r'^\d{2}\.\d$', p) is None and p.replace('.', '', 1).isdigit():
-              val = float(p)
-              if 48.0 <= val <= 62.0:
-                kinryo = p
-
-          # もしパーツの直接インデックスが分かっている場合のフォールバック
-          if len(parts) >= 10:
-            if parts[3]: ninki = parts[3]
-            if parts[4]: odds = parts[4]
-            if parts[5] in ["逃", "先行", "差", "追"]: kyakushitsu = parts[5]
-            else: kyakushitsu = "差"
-            if parts[6]: agari = parts[6]
-            if parts[7]: record = parts[7]
-            if parts[8]: kishu = parts[8]
-            if parts[9]: kinryo = parts[9]
-
+        parts = [p.strip() for p in line.split(",") if p.strip()]
+        if len(parts) >= 15:
           parsed_rows.append({
-              "日付": inp_date,
-              "開催地": inp_kaisai,
-              "レース番号": inp_rnum,
-              "距離・馬場": inp_dist,
-              "レース条件": inp_cond,
-              "馬番": umaban,
-              "馬名": ubana,
-              "人気": ninki,
-              "単勝オッズ": odds,
-              "脚質": kyakushitsu,
-              "上がり3F": agari,
-              "スピード指数": "",
-              "近走5走成績": record,
-              "騎手": kishu,
-              "斤量": kinryo,
+              "日付": parts[0],
+              "開催地": parts[1],
+              "レース番号": parts[2],
+              "距離・馬場": parts[3],
+              "レース条件": parts[4],
+              "馬番": parts[5],
+              "馬名": parts[6],
+              "人気": parts[7],
+              "単勝オッズ": parts[8],
+              "脚質": parts[9],
+              "上がり3F": parts[10],
+              "スピード指数": parts[11],
+              "近走5走成績": parts[12],
+              "騎手": parts[13],
+              "斤量": parts[14],
           })
 
       if parsed_rows:
@@ -490,6 +405,6 @@ with tab3:
         st.success("変換が完了しました！下のボックスをコピーしてTab1に貼り付けてください。")
         st.text_area("整形済みCSV出力（ワンタップ選択）", value=csv_text, height=150)
       else:
-        st.warning("有効な行が見つかりませんでした。テキストの形式を確認してください。")
+        st.warning("有効な行が見つかりませんでした。データ形式を確認してください。")
     else:
       st.warning("テキストが入力されていません。")
