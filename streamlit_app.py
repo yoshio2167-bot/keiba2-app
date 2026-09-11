@@ -370,7 +370,7 @@ with tab3:
 
   raw_txt = st.text_area(
       "ここにGeminiの文字起こしテキスト等をそのまま貼り付け",
-      placeholder="例:\n1 ショウナンアキツ 牡5 58.0 石橋脩 59.3 12人気 差 34.5",
+      placeholder="例:\nG2,16,タマモイカロス,9人気,30.8,外,33.4,0-3-3-1-3,池添謙一,57.0",
       height=150,
   )
 
@@ -404,37 +404,62 @@ with tab3:
       lines = [l.strip() for l in raw_txt.strip().split("\n") if l.strip()]
       parsed_rows = []
       for line in lines:
-        tokens = re.split(r'[\s,\t]+', line)
-        if len(tokens) >= 2:
-          umaban = tokens[0]
-          ubana = tokens[1]
+        # カンマ区切りまたはスペース・タブ区切りに対応
+        parts = [p.strip() for p in re.split(r'[,]+', line)]
+        if len(parts) >= 2:
+          # カンマ区切りの各要素を安全に取得
+          # 例: G2, 16, タマモイカロス, 9人気, 30.8, 外, 33.4, 0-3-3-1-3, 池添謙一, 57.0
+          umaban = parts[1] if len(parts) > 1 and parts[1].isdigit() else parts[0]
+          ubana = parts[2] if len(parts) > 2 else (parts[1] if len(parts) > 1 else "")
           
-          odds = "10.0"
           ninki = "5人気"
-          kishu = "石橋脩"
-          kinryo = "58.0"
+          odds = "10.0"
           kyakushitsu = "差"
           agari = ""
+          record = "0-0-0-0"
+          kishu = "レーン"
+          kinryo = "55.0"
 
-          for t in tokens[2:]:
-            # 上がり3Fの検出（30.0〜42.0の小数を優先的にキャッチ）
-            if re.search(r'^\d{2}\.\d$', t):
-              val = float(t)
-              if 30.0 <= val <= 42.0 and not agari:
-                agari = t
-                continue
+          # 各パーツからパターンマッチで確実に拾い出す
+          for p in parts:
+            if "人気" in p or re.search(r'^\d+人気$', p):
+              ninki = p
+            elif re.search(r'^\d+\.\d+$', p):
+              val = float(p)
+              # オッズっぽい数値 (300未満で小数点あり、かつ上がり3Fの範囲外か未設定)
+              if val < 300 and (val < 30.0 or val > 42.0) and odds == "10.0":
+                odds = p
+              # 上がり3Fっぽい数値 (30.0〜42.0)
+              elif 30.0 <= val <= 42.0:
+                agari = p
+            elif p in ["逃", "先行", "差", "追", "外", "良", "稍", "重", "不"]:
+              if p in ["逃", "先行", "差", "追"]:
+                kyakushitsu = p
+            elif re.search(r'^\d+-\d+-\d+', p):
+              record = p
+            elif re.search(r'^\d{2}\.\d$', p):
+              val = float(p)
+              if 30.0 <= val <= 42.0:
+                agari = p
+            elif re.search(r'^\d{2}\.\d$', p) is None and len(p) >= 2 and not p.isdigit() and "-" not in p and "人気" not in p:
+              # 名前の次以降にあって数値でないものは騎手の可能性が高い
+              if p != ubana:
+                kishu = p
+            elif re.search(r'^\d{2}\.\d$', p) is None and p.replace('.', '', 1).isdigit():
+              val = float(p)
+              if 48.0 <= val <= 62.0:
+                kinryo = p
 
-            if re.search(r'^\d+\.?\d*$', t) and float(t) < 300 and "." in t:
-              odds = t
-            elif "人気" in t or (t.isdigit() and int(t) <= 18):
-              if "人気" in t:
-                ninki = t
-            elif t in ["逃", "先行", "差", "追"]:
-              kyakushitsu = t
-            elif len(t) >= 2 and not t.isdigit() and "." not in t:
-              kishu = t
-            elif t.replace('.', '', 1).isdigit() and 48 <= float(t) <= 60:
-              kinryo = t
+          # もしパーツの直接インデックスが分かっている場合のフォールバック
+          if len(parts) >= 10:
+            if parts[3]: ninki = parts[3]
+            if parts[4]: odds = parts[4]
+            if parts[5] in ["逃", "先行", "差", "追"]: kyakushitsu = parts[5]
+            else: kyakushitsu = "差"
+            if parts[6]: agari = parts[6]
+            if parts[7]: record = parts[7]
+            if parts[8]: kishu = parts[8]
+            if parts[9]: kinryo = parts[9]
 
           parsed_rows.append({
               "日付": inp_date,
@@ -449,7 +474,7 @@ with tab3:
               "脚質": kyakushitsu,
               "上がり3F": agari,
               "スピード指数": "",
-              "近走5走成績": "0-0-0-0",
+              "近走5走成績": record,
               "騎手": kishu,
               "斤量": kinryo,
           })
