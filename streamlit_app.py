@@ -1,33 +1,26 @@
 from io import StringIO
 import re
-import random
-import time
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="能力重視＆レース荒れ度判定AI", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="競馬予想AIシミュレーター", layout="wide", initial_sidebar_state="collapsed")
 
-st.title("馬実力・調子重視 ＆ レース荒れ度判定AI ＋ ミニゲーム")
+st.title("競馬予想AIシミュレーター ＆ 精度検証ツール")
 
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🚀 能力評価＆荒れ度判定",
-    "📊 検証・自動判定記録",
-    "🛠️ スクショ・テキスト整形",
-    "🎮 リアルタイム競馬レース実況"
-])
+tab1, tab2, tab3 = st.tabs(["🚀 シミュレーション＆予想", "📊 結果照合・自動判定検証", "🛠️ Geminiテキスト・スクショ整形"])
 
 with tab1:
-  st.header("馬の実力・調子評価 ＆ レース荒れ度診断")
+  st.header("100回モンテカルロ・シミュレーション（厳選・絞り込み版）")
   st.write(
-      "出馬表CSVを貼り付けると、『スピード指数・上がり3F』に加えて『近走成績の好走度・調子・リズム』を総合解析して馬本来の実力を算出し、レースの荒れ度を自動判定します。"
+      "出馬表CSVを貼り付けると、オッズと実力を反映した模擬レースを実行し、ヤキトリを防ぐ『期待回収率フィルター＆ワイド2点（厳選勝負）』を算出してスプレッドシート用テキストで保存できます。"
   )
 
   pasted_data = st.text_area(
       "CSVデータ貼り付け欄",
       placeholder=(
           "日付,開催地,レース番号,距離・馬場,レース条件,馬番,馬名,人気,単勝オッズ,脚質,上がり3F,スピード指数,近走5走成績,騎手,斤量\n"
-          "2026/09/06,中山,12R,芝1200m(雨 稍重),3歳上1勝クラス,1,ショウナンアキツ,12人気,59.3,差,34.5,85.0,0-5-2-3,石橋脩,58.0"
+          "2026/09/06,中山,12R,芝1200m(雨 稍重),3歳上1勝クラス,1,ショウナンアキツ,12人気,59.3,差,,,,0-0-0-0,石橋脩,58.0"
       ),
       height=180,
   )
@@ -39,32 +32,28 @@ with tab1:
       if len(lines) > 0:
         first_line = lines[0]
         has_header = "馬番" in first_line or "馬名" in first_line or "日付" in first_line
+        
         data_lines = lines[1:] if has_header else lines
 
         parsed_rows = []
         for l in data_lines:
           parts = [p.strip() for p in l.split(",")]
           row_dict = {}
-          row_dict["斤量"] = parts[14] if len(parts) > 14 else (parts[-1] if len(parts) >= 1 else "55.0")
-          row_dict["騎手"] = parts[13] if len(parts) > 13 else (parts[-2] if len(parts) >= 2 else "レーン")
-          row_dict["近走5走成績"] = parts[12] if len(parts) > 12 and parts[12] else "0-0-0-0"
-          row_dict["スピード指数"] = parts[11] if len(parts) > 11 else ""
-          row_dict["上がり3F"] = parts[10] if len(parts) > 10 else ""
-          
-          raw_kyaku = parts[9] if len(parts) > 9 else "差"
-          if raw_kyaku not in ["逃", "先行", "差", "追"]:
-            raw_kyaku = "差"
-          row_dict["脚質"] = raw_kyaku
-
-          row_dict["単勝オッズ"] = parts[8] if len(parts) > 8 else "10.0"
-          row_dict["人気"] = parts[7] if len(parts) > 7 else "5人気"
-          row_dict["馬名"] = parts[6] if len(parts) > 6 else ""
-          row_dict["馬番"] = parts[5] if len(parts) > 5 else "1"
-          row_dict["レース条件"] = parts[4] if len(parts) > 4 else "3歳上1勝クラス"
-          row_dict["距離・馬場"] = parts[3] if len(parts) > 3 else "芝1200m(雨 稍重)"
-          row_dict["レース番号"] = parts[2] if len(parts) > 2 else "12R"
-          row_dict["開催地"] = parts[1] if len(parts) > 1 else "中山"
-          row_dict["日付"] = parts[0] if len(parts) > 0 else "2026/09/06"
+          row_dict["斤量"] = parts[-1] if len(parts) >= 1 else "55.0"
+          row_dict["騎手"] = parts[-2] if len(parts) >= 2 else "レーン"
+          row_dict["近走5走成績"] = parts[-3] if len(parts) >= 3 and parts[-3] else "0-0-0-0"
+          row_dict["スピード指数"] = parts[-4] if len(parts) >= 4 else ""
+          row_dict["上がり3F"] = parts[-5] if len(parts) >= 5 else ""
+          row_dict["脚質"] = parts[-6] if len(parts) >= 6 else "差"
+          row_dict["単勝オッズ"] = parts[-7] if len(parts) >= 7 else "10.0"
+          row_dict["人気"] = parts[-8] if len(parts) >= 8 else "5人気"
+          row_dict["馬名"] = parts[-9] if len(parts) >= 9 else ""
+          row_dict["馬番"] = parts[-10] if len(parts) >= 10 else "1"
+          row_dict["レース条件"] = parts[-11] if len(parts) >= 11 else "3歳上1勝クラス"
+          row_dict["距離・馬場"] = parts[-12] if len(parts) >= 12 else "芝1200m(雨 稍重)"
+          row_dict["レース番号"] = parts[-13] if len(parts) >= 13 else "12R"
+          row_dict["開催地"] = parts[-14] if len(parts) >= 14 else "中山"
+          row_dict["日付"] = parts[-15] if len(parts) >= 15 else "2026/09/06"
 
           parsed_rows.append(row_dict)
 
@@ -100,82 +89,68 @@ with tab1:
     except Exception as e:
       st.info("CSVデータを貼り付けるとここにプレビューが表示されます。")
 
-  if st.button("🚀 能力評価 ＆ 荒れ度判定を実行", type="primary"):
+  if st.button("🚀 100回シミュレーション＆厳選予想実行", type="primary"):
     if df_input is not None and not df_input.empty:
-      with st.spinner("馬の能力値・調子（近走成績）を解析中..."):
+      with st.spinner("100回の模擬レース（モンテカルロ法）を集計中..."):
         df_res = df_input.copy()
 
-        def calc_ability_score(row):
-          score = 50.0
+        def calc_enhanced_score(row):
+          try:
+            odds = float(row["オッズ_num"])
+            if odds <= 0: odds = 10.0
+          except:
+            odds = 10.0
+          
+          base_score = (1.0 / odds) * 100.0
+          
           try:
             s_val = float(row["speed_val"])
             if s_val > 0:
-              score += (s_val - 60.0) * 1.5
+              base_score += (s_val - 70.0) * 0.5
           except:
             pass
 
-          try:
-            f_val = float(row["上がり3F_val"])
-            if f_val > 25.0:
-              score += max(0.0, (37.0 - f_val) * 4.0)
-          except:
-            pass
+          return max(1.0, base_score)
 
-          try:
-            record_str = str(row["近走5走成績"])
-            parts_rec = record_str.split("-")
-            if len(parts_rec) >= 3:
-              wins = int(parts_rec[0]) if parts_rec[0].isdigit() else 0
-              seconds = int(parts_rec[1]) if parts_rec[1].isdigit() else 0
-              thirds = int(parts_rec[2]) if parts_rec[2].isdigit() else 0
-              score += (wins * 8.0) + (seconds * 5.0) + (thirds * 3.0)
-          except:
-            pass
+        df_res["ベース評価"] = df_res.apply(calc_enhanced_score, axis=1)
 
-          try:
-            odds = float(row["オッズ_num"])
-            if 0 < odds < 100:
-              score += max(0.0, (30.0 - odds) * 0.1)
-          except:
-            pass
+        n_simulations = 100
+        win_counts = np.zeros(len(df_res))
+        place_counts = np.zeros(len(df_res))
 
-          try:
-            umaban_int = int(str(row["馬番"]).strip())
-            score += (umaban_int * 0.001)
-          except:
-            pass
+        np.random.seed(42)
+        for _ in range(n_simulations):
+          noise = np.random.normal(
+              0, df_res["ベース評価"].values * 0.25, size=len(df_res)
+          )
+          sim_scores = df_res["ベース評価"].values + noise
+          top_indices = np.argsort(sim_scores)[::-1]
+          
+          winner_idx = top_indices[0]
+          win_counts[winner_idx] += 1
 
-          return max(10.0, score)
+          placers = top_indices[: min(3, len(df_res))]
+          for p_idx in placers:
+            place_counts[p_idx] += 1
 
-        df_res["能力値スコア"] = df_res.apply(calc_ability_score, axis=1)
-        df_res["能力値スコア_str"] = df_res["能力値スコア"].round(1).astype(str)
+        df_res["シミュ勝率_str"] = ((win_counts / n_simulations) * 100).round(1).astype(str) + "%"
+        df_res["シミュ複勝率_str"] = ((place_counts / n_simulations) * 100).round(1).astype(str) + "%"
+        
+        raw_win_rate = (win_counts / n_simulations) * 100
+        df_res["AI期待回収率_str"] = ((raw_win_rate / 100) * df_res["オッズ_num"] * 100).round(1).astype(str) + "%"
+        
+        df_res["_win_num"] = raw_win_rate
+        df_ranked = df_res.sort_values(by="_win_num", ascending=False).reset_index(drop=True)
 
-        df_ranked = df_res.sort_values(by="能力値スコア", ascending=False).reset_index(drop=True)
-
-        top1_score = df_ranked.iloc[0]["能力値スコア"]
-        top2_score = df_ranked.iloc[1]["能力値スコア"] if len(df_ranked) > 1 else top1_score
-        score_diff = top1_score - top2_score
-        top1_odds = float(df_ranked.iloc[0]["オッズ_num"])
-
-        if score_diff > 5.0 and top1_odds < 3.5:
-          race_tendency = "🔥 【堅実決着傾向】（本命の軸信頼度高・ガッチリ勝負）"
-          strategy_advice = "能力上位の軸馬が抜けています。相手を2頭に絞った「ワイド2点（◎-〇、◎-▲）」で手堅く回収を狙うのがベストです。"
-        elif score_diff < 1.5 or top1_odds > 10.0:
-          race_tendency = "⚡ 【大波乱・難解傾向】（混戦・穴馬台頭注意）"
-          strategy_advice = "上位拮抗または人気薄の能力値が高いため、荒れる可能性大です。手広く流すか、思い切った穴狙い（ワイドBOX等）がおすすめです。"
-        else:
-          race_tendency = "⚖️ 【標準・中波乱傾向】（上位拮抗・フォーメーション推奨）"
-          strategy_advice = "実力が拮抗しています。上位3頭（◎〇▲）を中心とした手堅い馬券構成がおすすめです。"
-
-        st.subheader("📊 能力・調子評価ランキング結果（実力順）")
+        st.subheader("📊 100回シミュレーション・ランキング結果")
         
         display_cols = [
             "開催地", "レース番号", "距離・馬場", "レース条件",
             "馬番", "馬名", "人気", "単勝オッズ",
-            "能力値スコア_str", "脚質", "上がり3F", "近走5走成績", "騎手"
+            "シミュ勝率_str", "シミュ複勝率_str", "AI期待回収率_str", "脚質", "騎手"
         ]
         available_cols = [c for c in display_cols if c in df_ranked.columns]
-        df_display = df_ranked[available_cols].rename(columns={"能力値スコア_str": "能力値スコア"})
+        df_display = df_ranked[available_cols]
         st.dataframe(df_display, use_container_width=True)
 
         kaisai_title = str(df_display["開催地"].iloc[0]) if not df_display["開催地"].empty else "中山"
@@ -193,7 +168,12 @@ with tab1:
 
         wide_1 = f"◎{top1['馬番']} - 〇{top2['馬番']}" if top1 is not None and top2 is not None else ""
         wide_2 = f"◎{top1['馬番']} - ▲{top3['馬番']}" if top1 is not None and top3 is not None else ""
-        strict_buy_focus = f"【おすすめ買い目】 {wide_1} / {wide_2}"
+        strict_buy_focus = f"【厳選ワイド2点】 {wide_1} / {wide_2}"
+
+        try:
+          roi_val_num = float(str(top1["AI期待回収率_str"]).replace("%", ""))
+        except:
+          roi_val_num = 100.0
 
         export_rows = []
         for _, row in df_ranked.iterrows():
@@ -204,8 +184,9 @@ with tab1:
               "距離・馬場": row["距離・馬場"],
               "レース条件": row["レース条件"],
               "AI上位3頭予想": ai_top3_combined if row.name == 0 else "",
-              "能力値スコア": round(row["能力値スコア"], 1),
-              "レース荒れ度判定": race_tendency if row.name == 0 else "",
+              "シミュ勝率": row["シミュ勝率_str"],
+              "シミュ複勝率": row["シミュ複勝率_str"],
+              "AI期待回収率": row["AI期待回収率_str"],
               "実際の1着馬": "",
               "実際の2着馬": "",
               "実際の3着馬": "",
@@ -226,9 +207,9 @@ with tab1:
 
         csv_download_data = df_export_final.to_csv(index=False).encode("utf-8-sig")
         st.download_button(
-            label="📥 評価結果をCSVで保存",
+            label="📥 シミュレーション結果をCSVで保存",
             data=csv_download_data,
-            file_name=f"{file_prefix}_ability_result.csv",
+            file_name=f"{file_prefix}_sim100_result.csv",
             mime="text/csv",
         )
 
@@ -236,23 +217,32 @@ with tab1:
         df_export_final.to_csv(tsv_buffer, sep="\t", index=False)
         sim_copy_text = tsv_buffer.getvalue()
 
-        st.markdown("### 📋 スプレッドシート用コピー欄（右上のボタンでワンクリックコピー）")
+        st.markdown(
+            "### 📋 シミュレーション結果 スプレッドシート用コピー欄（右上のボタンでワンクリックコピー）"
+        )
         st.code(sim_copy_text, language="text")
 
-        st.subheader("🎯 レース荒れ度診断 ＆ 推奨戦略")
-        st.info(f"**{race_tendency}**\n\n{strict_buy_focus}\n\n**【AI分析アドバイス】**\n{strategy_advice}")
+        st.subheader("🎯 厳選おすすめ買い目インフォ（ヤキトリ防止・点数絞り込み）")
+        if roi_val_num >= 150.0:
+          st.success(f"🔥 **【勝負レース推奨】（期待回収率: {top1['AI期待回収率_str']}）**\n\n{strict_buy_focus}\n\n※AI上位3頭のポテンシャルが高いため、ワイド2点に絞って効率よく回収を狙えます。")
+        else:
+          st.warning(f"⚠️ **【見送り・注意レース】（期待回収率: {top1['AI期待回収率_str']}）**\n\n{strict_buy_focus}\n\n※期待回収率が控えめなため、点数を抑えるかパス（見送り）も有効な選択肢です。")
     else:
       st.warning("データが入力されていません。CSVデータを貼り付けてください。")
 
 with tab2:
   st.header("実際のレース結果との照合・自動判定")
-  st.write("保存したCSVファイルをアップロードし、実際の1〜3着馬を選ぶことで、実力上位3頭の馬券内絡みを自動判定します。")
+  st.write(
+      "保存したシミュレーション結果（CSV）をアップロードし、実際の1〜3着馬を選択すると、AIの上位3頭（◎〇▲）が何頭絡んだかを自動で判定します。"
+  )
 
-  uploaded_sim_file = st.file_uploader("1. 保存したCSVファイルをアップロード", type=["csv"])
+  uploaded_sim_file = st.file_uploader(
+      "1. 保存したシミュレーション結果CSVをアップロード", type=["csv"]
+  )
 
   if uploaded_sim_file is not None:
     df_saved = pd.read_csv(uploaded_sim_file)
-    st.success("データを読み込みました！")
+    st.success("シミュレーション結果を読み込みました！")
 
     horse_options = [
         f"{row.get('馬番')}番 {row.get('馬名')} ({row.get('人気')}・単勝{row.get('単勝オッズ')}倍)"
@@ -265,7 +255,10 @@ with tab2:
     dist_val = str(df_saved["距離・馬場"].iloc[0]) if "距離・馬場" in df_saved.columns and not df_saved["距離・馬場"].empty else "芝1200m(雨 稍重)"
     cond_val = str(df_saved["レース条件"].iloc[0]) if "レース条件" in df_saved.columns and not df_saved["レース条件"].empty else "3歳上1勝クラス"
 
-    ai_top3_str = str(df_saved["AI上位3頭予想"].dropna().iloc[0]) if "AI上位3頭予想" in df_saved.columns and not df_saved["AI上位3頭予想"].dropna().empty else ""
+    top1_row = df_saved.iloc[0]
+    win_rate_val = str(top1_row.get("シミュ勝率", top1_row.get("シミュ勝率_str", "0%")))
+    place_rate_val = str(top1_row.get("シミュ複勝率", top1_row.get("シミュ複勝率_str", "0%")))
+    roi_val = str(top1_row.get("AI期待回収率", top1_row.get("AI期待回収率_str", "0%")))
 
     ai_top3_list = []
     for i in range(min(3, len(df_saved))):
@@ -273,16 +266,33 @@ with tab2:
       h_name = str(df_saved.iloc[i].get("馬名"))
       ai_top3_list.append({"num": h_num, "name": h_name})
 
+    t1 = f"◎{ai_top3_list[0]['num']}番 {ai_top3_list[0]['name']}" if len(ai_top3_list) > 0 else ""
+    t2 = f"〇{ai_top3_list[1]['num']}番 {ai_top3_list[1]['name']}" if len(ai_top3_list) > 1 else ""
+    t3 = f"▲{ai_top3_list[2]['num']}番 {ai_top3_list[2]['name']}" if len(ai_top3_list) > 2 else ""
+    ai_top3_str = f"{t1} / {t2} / {t3}"
+
     st.subheader("2. 実際のレース結果（1〜3着）を選択")
     col1, col2, col3 = st.columns(3)
     with col1:
-      actual_1st = st.selectbox("🥇 実際の1着馬", options=["選択してください"] + horse_options, index=0)
+      actual_1st = st.selectbox(
+          "🥇 実際の1着馬",
+          options=["選択してください"] + horse_options,
+          index=0,
+      )
     with col2:
-      actual_2nd = st.selectbox("🥈 実際の2着馬", options=["選択してください"] + horse_options, index=0)
+      actual_2nd = st.selectbox(
+          "🥈 実際の2着馬",
+          options=["選択してください"] + horse_options,
+          index=0,
+      )
     with col3:
-      actual_3rd = st.selectbox("🥉 実際の3着馬", options=["選択してください"] + horse_options, index=0)
+      actual_3rd = st.selectbox(
+          "🥉 実際の3着馬",
+          options=["選択してください"] + horse_options,
+          index=0,
+      )
 
-    if st.button("🔍 検証結果を自動判定する"):
+    if st.button("🔍 予想結果を自動判定する"):
       if actual_1st == "選択してください" or actual_2nd == "選択してください" or actual_3rd == "選択してください":
         st.warning("実際の1着〜3着馬すべてを選択してください。")
       else:
@@ -290,7 +300,11 @@ with tab2:
           m = re.match(r"^(\d+)番", sel_str.strip())
           return m.group(1) if m else ""
 
-        actual_nums = [get_umaban(actual_1st), get_umaban(actual_2nd), get_umaban(actual_3rd)]
+        actual_nums = [
+            get_umaban(actual_1st),
+            get_umaban(actual_2nd),
+            get_umaban(actual_3rd)
+        ]
 
         hit_horses = []
         for item in ai_top3_list:
@@ -300,23 +314,28 @@ with tab2:
         hit_count = len(hit_horses)
 
         if hit_count >= 2:
-          auto_memo = f"的中（実力上位から {hit_count}頭が馬券内・ワイド的中）"
+          auto_memo = f"的中（上位3頭から {hit_count}頭が馬券内絡み・ワイド的中圏内）"
           badge_type = "success"
         elif hit_count == 1:
-          auto_memo = f"的中（実力上位から {hit_count}頭が馬券内）"
+          auto_memo = f"的中（上位3頭から {hit_count}頭が馬券内絡み）"
           badge_type = "success"
         else:
-          auto_memo = "不格外れ（実力上位がすべて馬券外）"
+          auto_memo = "不格外れ（上位3頭がすべて馬券外）"
           badge_type = "warning"
 
         st.markdown("---")
-        st.subheader("📝 判定結果レポート")
+        st.subheader("📝 自動判定結果レポート")
 
         col_a, col_b = st.columns(2)
         with col_a:
-          st.info(f"**【実力上位3頭】**\n\n{ai_top3_str}")
+          st.info(f"**【AI上位3頭予想】**\n\n{ai_top3_str}")
         with col_b:
-          st.markdown(f"**【実際の3着まで】**\n\n🥇 1着: {actual_1st}\n\n🥈 2着: {actual_2nd}\n\n🥉 3着: {actual_3rd}")
+          st.markdown(
+              f"**【実際の3着まで】**\n\n"
+              f"🥇 1着: {actual_1st}\n\n"
+              f"🥈 2着: {actual_2nd}\n\n"
+              f"🥉 3着: {actual_3rd}"
+          )
 
         if badge_type == "success":
           st.balloons()
@@ -325,27 +344,35 @@ with tab2:
           st.warning(f"❌ **【自動判定】 {auto_memo}**")
 
         sheet_row_text = (
-            f"{date_val}\t{kaisai_val}\t{r_num_val}\t{dist_val}\t{cond_val}\t{ai_top3_str}\t-\t-\t{actual_1st}\t{actual_2nd}\t{actual_3rd}\t{auto_memo}"
+            f"{date_val}\t{kaisai_val}\t{r_num_val}\t{dist_val}\t{cond_val}\t{ai_top3_str}\t{win_rate_val}\t{place_rate_val}\t{roi_val}\t{actual_1st}\t{actual_2nd}\t{actual_3rd}\t{auto_memo}"
         )
 
         st.markdown("### 📋 検証結果 スプレッドシート用コピー欄（右上のボタンでワンクリックコピー）")
         st.code(sheet_row_text, language="text")
 
   else:
-    st.info("まずはTab1で保存したCSVファイルをアップロードしてください。")
+    st.info(
+        "まずはTab1で保存したシミュレーション結果のCSVファイルをアップロードしてください。"
+    )
 
 with tab3:
-  st.header("🛠️ テキスト整形ツール（選択式）")
-  st.write("出馬表テキストを貼り付け、各項目を**選択**して一発でCSVに変換します。")
+  st.header("🛠️ Geminiテキスト・スクショ整形ツール")
+  st.write(
+      "ネット競馬やGeminiでOCR（文字起こし）した生の出馬表テキストをここに貼り付けると、アプリが自動で解析して正しい15列のCSVに一瞬で整形します。"
+  )
 
-  raw_txt = st.text_area("ここにテキストを貼り付け", height=150)
+  raw_txt = st.text_area(
+      "ここにGeminiの文字起こしテキスト等をそのまま貼り付け",
+      placeholder="例:\n1 ショウナンアキツ 牡5 58.0 石橋脩 59.3 12人気 差",
+      height=150,
+  )
 
   col_t1, col_t2 = st.columns(2)
   with col_t1:
-    inp_date = st.text_input("日付", value="2026/09/06")
+    inp_date = st.text_input("基本設定：日付", value="2026/09/06")
   with col_t2:
     track_list = ["東京", "中山", "京都", "阪神", "中京", "新潟", "福島", "小倉", "札幌", "函館"]
-    inp_kaisai = st.selectbox("開催地", options=track_list, index=1)
+    inp_kaisai = st.selectbox("基本設定：開催地", options=track_list, index=1)
 
   col_t3, col_t4, col_t5 = st.columns(3)
   with col_t3:
@@ -370,21 +397,31 @@ with tab3:
       lines = [l.strip() for l in raw_txt.strip().split("\n") if l.strip()]
       parsed_rows = []
       for line in lines:
-        parts = [p.strip() for p in line.split(",") if p.strip()]
-        if len(parts) >= 2:
-          umaban = parts[0]
-          ubana = parts[1]
-          ninki = "5人気"
-          odds = "10.0"
-          kyakushitsu = "差"
+        tokens = re.split(r'[\s,\t]+', line)
+        if len(tokens) >= 2:
+          umaban = tokens[0]
+          ubana = tokens[1]
           
-          for p in parts[2:]:
-            if "人気" in p:
-              ninki = p
-            elif re.search(r'^\d+\.\d+$', p):
-              odds = p
-            elif p in ["逃", "先行", "差", "追"]:
-              kyakushitsu = p
+          odds = "10.0"
+          ninki = "5人気"
+          kishu = "石橋脩"
+          kinryo = "58.0"
+          kyakushitsu = "差"
+
+          for t in tokens[2:]:
+            if re.search(r'^\d+\.?\d*$', t) and float(t) < 300 and "." in t:
+              odds = t
+            elif "人気" in t or (t.isdigit() and int(t) <= 18):
+              if "人気" in t:
+                ninki = t
+            elif t in ["逃", "先行", "差", "追"]:
+              kyakushitsu = t
+            elif re.search(r'^\d{2}\.\d$', t):
+              pass
+            elif re.search(r'^\d{2}\.\d$', t) == None and len(t) >= 2 and not t.isdigit():
+              kishu = t
+            elif re.search(r'^\d{2}\.\d$', t) == None and (t.replace('.', '', 1).isdigit() and float(t) >= 48 and float(t) <= 60):
+              kinryo = t
 
           parsed_rows.append({
               "日付": inp_date,
@@ -397,11 +434,11 @@ with tab3:
               "人気": ninki,
               "単勝オッズ": odds,
               "脚質": kyakushitsu,
-              "上がり3F": "35.5",
-              "スピード指数": "75.0",
+              "上がり3F": "",
+              "スピード指数": "",
               "近走5走成績": "0-0-0-0",
-              "騎手": "騎手",
-              "斤量": "55.0",
+              "騎手": kishu,
+              "斤量": kinryo,
           })
 
       if parsed_rows:
@@ -412,92 +449,9 @@ with tab3:
             "脚質", "上がり3F", "スピード指数", "近走5走成績", "騎手", "斤量"
         ]
         csv_text = df_converted[cols_order].to_csv(index=False)
-        st.success("変換が完了しました！")
-        st.text_area("整形済みCSV出力", value=csv_text, height=150)
+        st.success("変換が完了しました！下のボックスをコピーしてTab1に貼り付けてください。")
+        st.text_area("整形済みCSV出力（ワンタップ選択）", value=csv_text, height=150)
       else:
-        st.warning("有効な行が見つかりませんでした。")
+        st.warning("有効な行が見つかりませんでした。テキストの形式を確認してください。")
     else:
       st.warning("テキストが入力されていません。")
-
-with tab4:
-  st.header("🏇 番号と馬名だけのシンプル競馬レース実況")
-  st.write("面倒な自動連動や複雑な設定は一切なし！番号と名前だけで、全頭がトラックを一周してゴールを駆け抜ける実況アニメーションです。")
-
-  # デフォルトのシンプルな出走馬（全頭一覧）
-  default_game_horses = pd.DataFrame([
-      {"馬番": 1, "馬名": "モカラマーズ", "脚質": "差"},
-      {"馬番": 2, "馬名": "ヴリトラハン", "脚質": "先行"},
-      {"馬番": 3, "馬名": "ミルミナーヴァ", "脚質": "逃"},
-      {"馬番": 4, "馬名": "マスターソアラ", "脚質": "差"},
-      {"馬番": 5, "馬名": "スーパージョック", "脚質": "追込"},
-      {"馬番": 6, "馬名": "ダイシンリンク", "脚質": "先行"},
-      {"馬番": 7, "馬名": "ポッドドンナー", "脚質": "差"},
-      {"馬番": 8, "馬名": "アリエスキンギ", "脚質": "逃"},
-      {"馬番": 9, "馬名": "タママノモリ", "脚質": "差"},
-      {"馬番": 10, "馬名": "ビカラ", "脚質": "逃"},
-  ])
-
-  st.markdown("### 📋 出走馬リスト（自由に馬番や名前を変更できます）")
-  edited_game_horses = st.data_editor(default_game_horses, num_rows="dynamic", key="pure_game_editor")
-  
-  race_start_btn = st.button("🏁 レーススタート！", type="primary", key="pure_start_btn")
-
-  race_placeholder = st.empty()
-  commentary_placeholder = st.empty()
-
-  if race_start_btn:
-    horses = edited_game_horses.to_dict("records")
-    if len(horses) < 2:
-      st.error("馬を2頭以上登録してください！")
-    else:
-      # 各馬の進行度（0m 〜 1000mゴール）
-      positions = {f"{h['馬番']}番 {h['馬名']}": 0 for h in horses}
-      max_pos = 1000
-      logs = ["【ファンファーレが鳴り響き、ゲートが開いた！全頭が一斉に飛び出した！】"]
-      commentary_placeholder.markdown("\n\n".join(logs))
-
-      # 10ステップでゴールまで駆け抜ける実況アニメーション
-      for step in range(1, 11):
-        time.sleep(0.35)
-        track_html = "<div style='font-family: monospace; font-size: 15px; background-color: #0e1117; padding: 15px; border-radius: 10px;'>"
-        
-        for h in horses:
-          key_name = f"{h['馬番']}番 {h['馬名']}"
-          kyaku = h["脚質"]
-          
-          # ランダムなスピードと脚質ごとの挙動
-          speed_factor = random.uniform(0.7, 1.3)
-          advance = speed_factor * 105
-
-          if kyaku == "逃" and step <= 5:
-            advance *= 1.35
-          elif kyaku in ["差", "追込"] and step >= 6:
-            advance *= 1.45
-
-          positions[key_name] = min(max_pos, positions[key_name] + advance)
-          
-          # トラックを走る馬のバー表示（【GOAL】に向かって進む）
-          percent = int((positions[key_name] / max_pos) * 35)
-          bar = "=" * percent + "🐎" + "-" * max(0, 35 - percent)
-          track_html += f"<b>{key_name}</b> [{kyaku}]<br>🏁[{bar}] {int(positions[key_name])}m<br><br>"
-
-        track_html += "</div>"
-        race_placeholder.markdown(track_html, unsafe_allow_html=True)
-
-        if step == 3:
-          leader = max(positions, key=positions.get)
-          logs.append(f"【3コーナー通過】 現在の先頭は <b>{leader}</b>！")
-        elif step == 7:
-          leader = max(positions, key=positions.get)
-          logs.append(f"【最後の直線へ向いた！】 先頭は <b>{leader}</b>！外から一気に各馬が追い上げる！")
-
-        commentary_placeholder.markdown("\n\n".join(logs))
-
-      # ゴール順位の決定
-      sorted_finish = sorted(positions.items(), key=lambda x: x[1], reverse=True)
-      winner = sorted_finish[0][0]
-      second = sorted_finish[1][0]
-      third = sorted_finish[2][0] if len(sorted_finish) > 2 else ""
-
-      logs.append(f"🏆 **【ゴールイン！！】**<br>🥇 1着: <b>{winner}</b><br>🥈 2着: <b>{second}</b><br>🥉 3着: <b>{third}</b>")
-      commentary_placeholder.markdown("\n\n".join(logs))
