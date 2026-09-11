@@ -75,7 +75,7 @@ with tab1:
 
         df_input["人気_num"] = df_input["人気"].apply(lambda x: extract_num(x, 5.0))
         df_input["オッズ_num"] = df_input["単勝オッズ"].apply(lambda x: extract_num(x, 15.0))
-        df_input["上がり3F_val"] = df_input["上がり3F"].apply(lambda x: extract_num(x, 35.5))
+        df_input["上がり3F_val"] = df_input["上がり3F"].apply(lambda x: extract_num(x, 0.0))
         df_input["speed_val"] = df_input["スピード指数"].apply(lambda x: extract_num(x, 0.0))
 
         st.success(f"データを正常に読み込みました（全 {len(df_input)} 頭登録中）")
@@ -102,14 +102,14 @@ with tab1:
           except:
             odds = 10.0
           
-          # オッズと上がり3F（タイムが良い＝数値が小さい）を総合評価に反映
-          base_score = max(5.0, 120.0 / (np.log(odds + 1.0) + 0.5))
+          # オッズをベースにした基本ポテンシャル
+          base_score = max(10.0, 150.0 / (np.log(odds + 1.0) + 0.8))
           
           try:
             f_val = float(row["上がり3F_val"])
+            # 上がり3Fのデータが存在する場合のみ強力に加点
             if 30.0 <= f_val <= 42.0:
-              # 上がりが速いほど加点（例: 31.7秒なら高評価）
-              base_score += (40.0 - f_val) * 4.5
+              base_score += (40.0 - f_val) * 6.0
           except:
             pass
 
@@ -124,7 +124,8 @@ with tab1:
         np.random.seed(42)
         scores_arr = df_res["ベース評価"].values
         for _ in range(n_simulations):
-          noise = np.random.normal(0, np.mean(scores_arr) * 0.35, size=len(df_res))
+          # 適度な乱数ノイズを加え、全頭にチャンスが分散するように調整
+          noise = np.random.normal(0, np.mean(scores_arr) * 0.45, size=len(df_res))
           sim_scores = scores_arr + noise
           top_indices = np.argsort(sim_scores)[::-1]
           
@@ -360,7 +361,7 @@ with tab2:
 with tab3:
   st.header("🛠️ Geminiテキスト・スクショ整形ツール")
   st.write(
-      "ご提示いただいたようなカンマ区切りの出馬表データをここに貼り付けると、アプリが自動で15列の正しいフォーマットに完璧に整えます。"
+      "カンマ区切りの出馬表データをここに貼り付けると、アプリが自動で15列の正しいフォーマットに完璧に整えます。"
   )
 
   raw_txt = st.text_area(
